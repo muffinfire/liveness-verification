@@ -1,0 +1,7 @@
+# __pycache__/
+.venv/
+.DS_Store
+cert.pem
+key.pem
+*.xml
+*.dat
