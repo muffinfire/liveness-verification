@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liveness Verification</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Liveness Verification System</h1>
+        
+        <div class="card-container">
+            <div class="card">
+                <h2>Request Verification</h2>
+                <p>Generate a code and send it to someone to verify they're human</p>
+                <div id="request-container">
+                    <button id="generate-code-btn" class="button">Generate Code</button>
+                    <div id="code-display" class="hidden">
+                        <h3>Your verification code:</h3>
+                        <div class="verification-code"><span id="verification-code"></span></div>
+                        <p>Share this code with the person you want to verify</p>
+                        <div id="verification-status" class="status-waiting">
+                            Waiting for verification...
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>Complete Verification</h2>
+                <p>Enter a verification code to prove you're human</p>
+                <div id="verify-container">
+                    <div class="input-group">
+                        <input type="text" id="code-input" placeholder="Enter 6-digit code" maxlength="6" pattern="[0-9]{6}">
+                        <button id="submit-code-btn" class="button">Verify</button>
+                    </div>
+                    <!-- verify-status will be added here by JavaScript -->
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>Secure liveness detection for remote identity verification</p>
+        </div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="{{ url_for('static', filename='js/landing.js') }}"></script>
+</body>
+</html> 

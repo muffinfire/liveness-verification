@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error - Liveness Verification</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Error</h1>
+        
+        <div class="error-container">
+            <div class="error-icon">❌</div>
+            <div class="error-message">{{ message }}</div>
+            <a href="{{ redirect_url }}" class="button">Return to Home</a>
+        </div>
+    </div>
+    
+    <script>
+        // Automatically redirect after 5 seconds
+        setTimeout(() => {
+            window.location.href = "{{ redirect_url }}";
+        }, 5000);
+    </script>
+</body>
+</html> 

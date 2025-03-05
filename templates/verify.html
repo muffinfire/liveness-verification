@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liveness Verification</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Liveness Verification</h1>
+        <div class="session-info">
+            <p>Session Code: <span id="session-code">{{ session_code }}</span></p>
+        </div>
+        
+        <div class="video-container">
+            <div class="video-wrapper">
+                <video id="webcam" autoplay playsinline></video>
+                <canvas id="overlay" style="display: none;"></canvas>
+            </div>
+            <div id="processed-frame-container">
+                <img id="processed-frame" alt="Processed Frame">
+                <img id="debug-frame" alt="Debug Frame" class="hidden">
+            </div>
+        </div>
+        
+        <div class="challenge-container">
+            <div id="challenge-text" class="challenge-text">Waiting for challenge...</div>
+            <div class="status-container">
+                <div class="status-item">
+                    <span>Action</span>
+                    <span id="action-status">❌</span>
+                </div>
+                <div class="status-item">
+                    <span>Word</span>
+                    <span id="word-status">❌</span>
+                </div>
+                <div class="status-item">
+                    <span>Time</span>
+                    <span id="time-remaining">0s</span>
+                </div>
+            </div>
+        </div>
+        
+        <div id="result-container" class="result-container hidden">
+            <div id="result-text" class="result-text"></div>
+            <button id="reset-button" class="button">Try Again</button>
+        </div>
+        
+        <div class="instructions">
+            <h2>Instructions</h2>
+            <p>Allow camera access when prompted</p>
+            <p>Follow the challenge instructions displayed on screen</p>
+            <p>Complete both the action and speech parts of the challenge</p>
+            <p>You have up to 3 attempts to verify your identity</p>
+        </div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

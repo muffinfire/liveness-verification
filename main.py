@@ -1,0 +1,80 @@
+"""Main application for liveness detection."""
+
+import cv2
+import time
+import argparse
+import logging
+from typing import Optional
+
+from config import Config
+from liveness_detector import LivenessDetector
+
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(description="Liveness Detection System")
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode")
+    parser.add_argument("--camera", type=int, default=0, help="Camera index")
+    return parser.parse_args()
+
+def main():
+    """Main application entry point."""
+    # Parse command line arguments
+    args = parse_args()
+    
+    # Create configuration
+    config = Config()
+    config.DEBUG = args.debug
+    
+    # Configure logging
+    logging_level = logging.DEBUG if config.DEBUG else logging.INFO
+    logging.basicConfig(
+        level=logging_level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger(__name__)
+    
+    # Initialize camera
+    logger.info(f"Opening camera {args.camera}")
+    cap = cv2.VideoCapture(args.camera)
+    
+    if not cap.isOpened():
+        logger.error("Error: Could not open camera")
+        return
+    
+    # Set camera properties
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    
+    # Initialize liveness detector
+    detector = LivenessDetector(config)
+    
+    # Main loop
+    while True:
+        # Read frame
+        ret, frame = cap.read()
+        
+        if not ret:
+            logger.error("Error: Could not read frame")
+            break
+        
+        # Process frame
+        display_frame, exit_flag = detector.detect_liveness(frame)
+        
+        # Display frame
+        cv2.imshow("Liveness Detection", display_frame)
+        
+        # Check for exit
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('q') or exit_flag:
+            break
+        elif key == ord('r'):
+            # Reset detector
+            detector.reset()
+    
+    # Release resources
+    cap.release()
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    main()
+
