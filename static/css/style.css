@@ -105,25 +105,85 @@ input[type="text"]:focus {
     text-align: center;
 }
 
+#qr-display img {
+    margin-top: 15px;
+    max-width: 200px;
+    border-radius: 8px;
+    border: 1px solid #333;
+    object-fit: contain;
+    display: block;
+    margin: 0 auto;
+}
+
 .status-waiting {
-    color: #f39c12;
+    padding: 10px;
+    color: #3498db;
+    background-color: rgba(73, 100, 251, 0.2);
+    border: 1px solid rgba(73, 100, 251, 0.3);
+    border-radius: 8px;
     font-weight: 500;
     margin-top: 20px;
+    margin-bottom: 20px;
     text-align: center;
+    font-size: 20px;
+    transition: all 0.3s ease;
+}
+
+.status-progress {
+    padding: 10px;
+    color: #e0bd65;
+    background-color: rgba(248, 255, 48, 0.2); 
+    border: 1px solid rgba(248, 255, 48, 0.3);
+    border-radius: 8px;
+    font-weight: 500;
+    margin-top: 20px;
+    margin-bottom: 20px;
+    text-align: center;
+    font-size: 20px;
+    transition: all 0.3s ease;
 }
 
 .status-success {
+    padding: 10px;
     color: #4cd137;
+    background-color: rgba(46, 204, 113, 0.2);
+    border: 1px solid rgba(46, 204, 113, 0.3);
+    border-radius: 8px;
     font-weight: 500;
     margin-top: 20px;
+    margin-bottom: 20px;
     text-align: center;
+    font-size: 20px;
+    transition: all 0.3s ease;
 }
 
 .status-failed {
-    color: #e84118;
+    padding: 10px;
+    color: #e8603e;
+    background-color: rgba(231, 76, 60, 0.2);   
+    border: 1px solid rgba(231, 76, 60, 0.3);
+    border-radius: 8px;
     font-weight: 500;
     margin-top: 20px;
+    margin-bottom: 20px;
     text-align: center;
+    font-size: 20px;
+    transition: all 0.3s ease;
+}
+
+.status-duress {
+    padding: 10px;
+    color: #ff0000;
+    background-color: rgba(231, 76, 60, 0.2);
+    border: 1px solid rgba(231, 76, 60, 0.3);
+    border-radius: 8px;
+    font-weight: 500;
+    margin-top: 20px;
+    margin-bottom: 20px;
+    text-align: center;
+    font-size: 20px;
+    white-space: pre-line;
+    transition: all 0.3s ease;
 }
 
 .session-info {
@@ -273,6 +333,11 @@ input[type="text"]:focus {
     color: #c0392b;
 }
 
+.result-text.duress {
+    background-color: rgba(230, 126, 34, 0.3);
+    color: #e67e22;
+}
+
 .button {
     background-color: #2980b9;
     color: white;
@@ -366,7 +431,7 @@ input[type="text"]:focus {
 }
 
 .error-icon {
-    font-size: 48px;
+    font-size: 68px;
     color: #e74c3c;
     margin-bottom: 20px;
 }
@@ -408,7 +473,7 @@ input[type="text"]:focus {
     border: 1px solid rgba(52, 152, 219, 0.3);
 }
 
-/* Success/Failure overlay effects */
+/* Success/Failure/Duress overlay effects */
 .success-overlay {
     box-shadow: 0 0 20px 10px rgba(46, 204, 113, 0.6);
     filter: sepia(0.2) saturate(1.5) brightness(1.1) hue-rotate(60deg);
@@ -421,18 +486,24 @@ input[type="text"]:focus {
     border: 3px solid #e74c3c;
 }
 
-/* Update the debug frame styles */
+.duress-overlay {
+    box-shadow: 0 0 20px 10px rgba(230, 126, 34, 0.6);
+    filter: sepia(0.3) saturate(1.5) brightness(0.9) hue-rotate(10deg);
+    border: 3px solid #e67e22;
+}
+
+/* Debug frame styles */
 #debug-frame {
     width: 100%;
     height: auto;
     border-radius: 12px;
     border: 1px solid #333;
     box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
-    object-fit: contain; /* Keep aspect ratio */
+    object-fit: contain;
 }
 
 #processed-frame-container, .video-wrapper {
     width: 48%;
     max-width: 640px;
     height: auto;
-} 
+}

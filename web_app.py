@@ -7,6 +7,7 @@ import numpy as np
 import logging
 import random
 import string
+import qrcode
 from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import threading
@@ -145,19 +146,29 @@ def handle_generate_code():
     logger.info(f"Generate code request from session {session_id}")
     
     code = ''.join(random.choices(string.digits, k=6))
+    verification_url = f"{config.BASE_URL}/verify/{code}"
+    qr = qrcode.QRCode(version=1, box_size=10, border=5)
+    qr.add_data(verification_url)
+    qr.make(fit=True)
+    qr_img = qr.make_image(fill='black', back_color='white')
+    qr_img.save(f"static/qr_codes/{code}.png")
+    qr_path = f"/static/qr_codes/{code}.png"
+    
     verification_codes[code] = {
         'requester_id': session_id,
         'created_at': time.time(),
         'status': 'pending'
     }
     
-    logger.info(f"Emitting verification code {code} to session {session_id}")
-    emit('verification_code', {'code': code})
+    logger.info(f"Emitting verification code {code} with QR code to session {session_id}")
+    emit('verification_code', {'code': code, 'qr_code': qr_path})
     
     def expire_code():
         time.sleep(600)
         if code in verification_codes and verification_codes[code]['status'] == 'pending':
             del verification_codes[code]
+            if os.path.exists(f"static/qr_codes/{code}.png"):
+                os.remove(f"static/qr_codes/{code}.png")
             logger.info(f"Expired verification code {code}")
     
     expiration_thread = threading.Thread(target=expire_code)
@@ -269,24 +280,26 @@ def handle_process_frame(data):
             'word_completed': result['word_completed'],
             'time_remaining': result['time_remaining'],
             'verification_result': result['verification_result'],
-            'exit_flag': result['exit_flag']
+            'exit_flag': result['exit_flag'],
+            'duress_detected': result['duress_detected']
         }
         logger.debug(f"Emitting processed_frame: has_image={bool(disp_b64)}, has_debug={bool(debug_b64)}")
         emit('processed_frame', emit_data)
         
         if result['exit_flag']:
             active_sessions[session_id]['attempts'] = active_sessions[session_id].get('attempts', 0) + 1
-            if result['verification_result'] == 'PASS' or active_sessions[session_id]['attempts'] >= 3:
+            if result['verification_result'] == 'PASS' or active_sessions[session_id]['attempts'] >= 3 or result['duress_detected']:
                 if code and code in verification_codes:
                     verification_codes[code]['status'] = 'completed'
                     verification_codes[code]['result'] = result['verification_result']
                     requester_id = verification_codes[code]['requester_id']
                     emit('verification_result', {
                         'result': result['verification_result'],
-                        'code': code
+                        'code': code,
+                        'duress_detected': result['duress_detected']
                     }, room=requester_id)
             elif result['verification_result'] == 'FAIL':
-                detector.reset()  # Reset on failure to start a new challenge
+                detector.reset()
                 logger.info(f"Reset detector after failure for session {session_id}")
     except Exception as e:
         logger.error(f"Error processing frame: {e}")
@@ -310,6 +323,7 @@ def handle_verification_complete(data):
         logger.info(f"Verification {code} completed with result: {result}")
 
 if __name__ == '__main__':
+    os.makedirs('static/qr_codes', exist_ok=True)
     cleanup_thread = threading.Thread(target=cleanup_inactive_sessions)
     cleanup_thread.daemon = True
     cleanup_thread.start()

@@ -7,9 +7,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const submitCodeBtn = document.getElementById('submit-code-btn');
     const verifyContainer = document.getElementById('verify-container');
     const verifyStatus = document.createElement('div');
+    const qrDisplay = document.createElement('div'); // Add QR code display
     
     verifyStatus.className = 'verify-status';
     verifyContainer.appendChild(verifyStatus);
+    qrDisplay.id = 'qr-display';
+    codeDisplay.appendChild(qrDisplay); // Add QR display under code
     
     let socket;
     let currentCode = null;
@@ -29,6 +32,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         socket.on('error', (data) => {
             console.error('Socket error:', data);
+            verificationStatus.textContent = `Error: ${data.message}`;
+            verificationStatus.className = 'status-error';
         });
         
         socket.on('verification_code', (data) => {
@@ -37,6 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
             verificationCode.textContent = currentCode;
             codeDisplay.classList.remove('hidden');
             generateCodeBtn.classList.add('hidden');
+            qrDisplay.innerHTML = `<img src="${data.qr_code}" alt="QR Code for ${data.code}">`;
             
             // Update status
             verificationStatus.textContent = 'Waiting for verification...';
@@ -44,25 +50,26 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         socket.on('verification_started', (data) => {
-            verificationStatus.textContent = 'Verification in progress...';
-            verificationStatus.className = 'status-waiting';
+            if (data.code === currentCode) {
+                verificationStatus.textContent = 'Verification in progress...';
+                verificationStatus.className = 'status-progress';
+            }
         });
         
         socket.on('verification_result', (data) => {
-            if (data.result === 'PASS') {
-                verificationStatus.textContent = 'Verification PASSED ✅';
-                verificationStatus.className = 'status-success';
-            } else {
-                verificationStatus.textContent = 'Verification FAILED ❌';
-                verificationStatus.className = 'status-failed';
+            if (data.code === currentCode) {
+                if (data.duress_detected) {
+                    verificationStatus.textContent = 'Duress Detected!\n!!! DO NOT PROCEED !!!';
+                    verificationStatus.className = 'status-duress';
+                } else if (data.result === 'PASS') {
+                    verificationStatus.textContent = 'Verification PASSED';
+                    verificationStatus.className = 'status-success';
+                } else {
+                    verificationStatus.textContent = 'Verification FAILED';
+                    verificationStatus.className = 'status-failed';
+                }
+                // Status persists; no auto-reset here
             }
-            
-            // Re-enable generate button after 5 seconds
-            setTimeout(() => {
-                generateCodeBtn.classList.remove('hidden');
-                codeDisplay.classList.add('hidden');
-                currentCode = null;
-            }, 5000);
         });
         
         socket.on('code_error', (data) => {
@@ -77,7 +84,6 @@ document.addEventListener('DOMContentLoaded', () => {
             socket.emit('generate_code');
         } else {
             console.error('Socket not connected');
-            // Try to reconnect
             initSocket();
             setTimeout(() => {
                 if (socket && socket.connected) {
@@ -94,7 +100,6 @@ document.addEventListener('DOMContentLoaded', () => {
         verifyStatus.textContent = message;
         verifyStatus.className = 'verify-status error';
         
-        // Clear after 3 seconds
         setTimeout(() => {
             verifyStatus.textContent = '';
             verifyStatus.className = 'verify-status';
@@ -106,7 +111,6 @@ document.addEventListener('DOMContentLoaded', () => {
         verifyStatus.textContent = message;
         verifyStatus.className = 'verify-status success';
         
-        // Clear after 1 second before redirect
         setTimeout(() => {
             verifyStatus.textContent = '';
             verifyStatus.className = 'verify-status';
@@ -122,13 +126,11 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        // Show loading state
         submitCodeBtn.disabled = true;
         submitCodeBtn.textContent = 'Checking...';
         verifyStatus.textContent = 'Validating code...';
         verifyStatus.className = 'verify-status info';
         
-        // Check if code exists via fetch API
         fetch(`/check_code/${code}`)
             .then(response => {
                 if (!response.ok) {
@@ -142,7 +144,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 if (data.valid) {
                     showVerifySuccess('Code valid! Redirecting...');
-                    // Redirect to verification page with code
                     setTimeout(() => {
                         window.location.href = `/verify/${code}`;
                     }, 1000);
@@ -167,4 +168,4 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initialize
     initSocket();
-}); 
+});

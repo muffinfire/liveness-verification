@@ -42,7 +42,6 @@ document.addEventListener('DOMContentLoaded', () => {
             debugFrame.style.display = showDebugFrame ? 'block' : 'none';
             isProcessing = true;
             console.log('Processing started after debug status received');
-            // Start capturing frames immediately
             requestAnimationFrame(captureAndSendFrame);
         });
         
@@ -55,22 +54,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     action: data.action_completed,
                     word: data.word_completed,
                     time: data.time_remaining,
-                    result: data.verification_result
+                    result: data.verification_result,
+                    duress: data.duress_detected
                 });
             }
             
             if (data.debug_image) {
-                console.log('Setting debug frame src to debug_image');
                 debugFrame.src = data.debug_image;
                 debugFrame.classList.remove('hidden');
                 debugFrame.style.display = showDebugFrame ? 'block' : 'none';
             } else if (data.image) {
-                console.log('Setting debug frame src to image (fallback)');
                 debugFrame.src = data.image;
                 debugFrame.classList.remove('hidden');
                 debugFrame.style.display = showDebugFrame ? 'block' : 'none';
-            } else {
-                console.log('No image or debug_image received');
             }
             
             if (data.challenge) {
@@ -88,39 +84,42 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (data.verification_result !== 'PENDING') {
                 isProcessing = false;
-                console.log(`Verification result: ${data.verification_result}`);
-                if (data.verification_result === 'PASS') {
+                if (data.duress_detected) {
+                    resultText.textContent = 'Under Duress Detected!';
+                    resultText.className = 'result-text duress';
+                    applyVideoEffect('duress');
+                    resultContainer.classList.remove('hidden');
+                    setTimeout(() => window.location.href = '/', 5000);
+                } else if (data.verification_result === 'PASS') {
                     resultText.textContent = 'Verification Successful!';
                     resultText.className = 'result-text success';
                     applyVideoEffect('success');
-                    setTimeout(() => window.location.href = '/', 3000);
+                    resultContainer.classList.remove('hidden');
+                    setTimeout(() => window.location.href = '/', 5000);
                 } else {
                     resultText.textContent = 'Verification Failed!';
                     resultText.className = 'result-text failure';
                     applyVideoEffect('failure');
+                    resultContainer.classList.remove('hidden');
                     
                     verificationAttempts++;
                     console.log(`Attempt ${verificationAttempts} of ${MAX_VERIFICATION_ATTEMPTS}`);
                     if (verificationAttempts >= MAX_VERIFICATION_ATTEMPTS) {
                         resultText.textContent = 'Maximum attempts reached. Verification failed.';
-                        setTimeout(() => window.location.href = '/', 3000);
+                        setTimeout(() => window.location.href = '/', 5000);
                     } else {
                         setTimeout(() => {
-                            resultContainer.classList.add('hidden');
                             isProcessing = true;
                             removeVideoEffect();
                             requestAnimationFrame(captureAndSendFrame);
                         }, 3000);
                     }
                 }
-                resultContainer.classList.remove('hidden');
             } else if (isProcessing) {
-                console.log('Requesting next frame');
                 requestAnimationFrame(captureAndSendFrame);
             }
             
             if (data.time_remaining <= 0 && data.verification_result === 'PENDING') {
-                console.log('Challenge timed out, resetting...');
                 socket.emit('reset', { code: sessionCode });
                 verificationAttempts++;
                 
@@ -129,6 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     resultText.className = 'result-text failure';
                     resultContainer.classList.remove('hidden');
                     isProcessing = false;
+                    setTimeout(() => window.location.href = '/', 5000);
                 } else {
                     challengeText.textContent = `Attempt ${verificationAttempts+1} of ${MAX_VERIFICATION_ATTEMPTS}...`;
                     setTimeout(() => {
@@ -146,11 +146,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         socket.on('max_attempts_reached', () => {
-            console.log('Max attempts reached');
             isProcessing = false;
             resultText.textContent = 'Maximum verification attempts reached.';
             resultContainer.classList.remove('hidden');
             applyVideoEffect('failure');
+            setTimeout(() => window.location.href = '/', 5000);
         });
         
         socket.on('disconnect', () => {
@@ -161,7 +161,6 @@ document.addEventListener('DOMContentLoaded', () => {
         socket.on('challenge', (data) => {
             if (data && data.text) {
                 challengeText.textContent = data.text;
-                console.log('New challenge received:', data.text);
             }
         });
     }
@@ -171,12 +170,14 @@ document.addEventListener('DOMContentLoaded', () => {
             videoContainer.classList.add('success-overlay');
         } else if (effect === 'failure') {
             videoContainer.classList.add('failure-overlay');
+        } else if (effect === 'duress') {
+            videoContainer.classList.add('duress-overlay');
         }
     }
     
     function removeVideoEffect() {
-        videoContainer.classList.remove('success-overlay', 'failure-overlay');
-        resultContainer.classList.add('hidden');
+        videoContainer.classList.remove('success-overlay', 'failure-overlay', 'duress-overlay');
+        // Do not hide resultContainer here to keep status visible
     }
     
     function captureAndSendFrame() {
@@ -186,14 +187,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         try {
-            console.log('Capturing frame');
             const offscreenCanvas = document.createElement('canvas');
             offscreenCanvas.width = video.videoWidth;
             offscreenCanvas.height = video.videoHeight;
             const offscreenCtx = offscreenCanvas.getContext('2d');
             offscreenCtx.drawImage(video, 0, 0, offscreenCanvas.width, offscreenCanvas.height);
             const imageData = offscreenCanvas.toDataURL('image/jpeg', 0.8);
-            console.log('Frame captured, size:', imageData.length);
             
             if (isDebugMode && frameCount % 30 === 0) {
                 console.log(`Sending frame #${frameCount}`);
@@ -203,7 +202,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 image: imageData,
                 code: sessionCode
             });
-            console.log('Frame sent to server');
             frameCount++;
         } catch (err) {
             console.error('Error capturing frame:', err);
@@ -212,7 +210,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     async function initWebcam() {
         try {
-            console.log('Requesting webcam access');
             stream = await navigator.mediaDevices.getUserMedia({
                 video: {
                     width: { ideal: 640 },
@@ -223,12 +220,9 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             video.srcObject = stream;
             video.onloadedmetadata = () => {
-                console.log('Webcam metadata loaded, starting playback');
                 video.play().catch(err => console.error('Error playing video:', err));
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
-                // Start frame capture once webcam is ready
-                console.log('Initial frame capture requested');
                 requestAnimationFrame(captureAndSendFrame);
             };
         } catch (err) {
@@ -239,9 +233,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     resetButton.addEventListener('click', () => {
         if (socket && socket.connected) {
-            console.log('Sending reset request');
             socket.emit('reset', { code: sessionCode });
-            resultContainer.classList.add('hidden');
             isProcessing = true;
             removeVideoEffect();
             requestAnimationFrame(captureAndSendFrame);
@@ -249,13 +241,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     function init() {
-        console.log('Initializing verification page');
         initSocket();
         initWebcam();
     }
     
     window.addEventListener('beforeunload', () => {
-        console.log('Cleaning up before unload');
         if (socket && socket.connected) {
             socket.disconnect();
         }

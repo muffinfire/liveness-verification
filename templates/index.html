@@ -19,7 +19,8 @@
                     <div id="code-display" class="hidden">
                         <h3>Your verification code:</h3>
                         <div class="verification-code"><span id="verification-code"></span></div>
-                        <p>Share this code with the person you want to verify</p>
+                        <!-- QR code will be appended here by JavaScript -->
+                        <p>Share this code or scan the QR code to verify</p>
                         <div id="verification-status" class="status-waiting">
                             Waiting for verification...
                         </div>
@@ -48,4 +49,4 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script src="{{ url_for('static', filename='js/landing.js') }}"></script>
 </body>
-</html> 
+</html>

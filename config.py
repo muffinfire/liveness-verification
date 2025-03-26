@@ -4,10 +4,10 @@ import os
 
 class Config:
     # Debug mode
-    DEBUG = True
+    DEBUG = False
     
     # Show debug frame with eye tracking polygons, EAR values, etc.
-    SHOW_DEBUG_FRAME = True
+    SHOW_DEBUG_FRAME = False
     
     # Camera settings
     CAMERA_WIDTH = 640
@@ -46,7 +46,8 @@ class Config:
         "sky /1e-3/",
         "ground /1e-3/",
         "hello /1e-3/",
-        "noise /1e-1/"
+        "verify /1e-3/",
+        "noise /1e-1/",
     ]
     
     # Liveness scoring
@@ -70,3 +71,4 @@ class Config:
     KEYFILE = 'key.pem'
     HOST = '0.0.0.0'
     PORT = int(os.environ.get('PORT', 8080))
+    BASE_URL = 'https://192.168.8.126:8080'  # Configurable base URL for QR code

@@ -45,8 +45,9 @@ class LivenessDetector:
         
         self.consecutive_live_frames = 0
         self.consecutive_fake_frames = 0
-        self.status = "Analyzing..."
+        self.status = "Waiting for verification..."
         self.liveness_score = 0.0
+        self.duress_detected = False
         
         self.start_challenge()
         self.logger.debug("LivenessDetector initialized")
@@ -116,8 +117,9 @@ class LivenessDetector:
         self.challenge_manager.reset()
         self.consecutive_live_frames = 0
         self.consecutive_fake_frames = 0
-        self.status = "Analyzing..."
+        self.status = "Waiting for verification..."
         self.liveness_score = 0.0
+        self.duress_detected = False
         self.start_challenge()
         self.logger.debug("LivenessDetector reset")
 
@@ -144,7 +146,8 @@ class LivenessDetector:
                 'challenge_text': None,
                 'action_completed': False,
                 'word_completed': False,
-                'time_remaining': 0
+                'time_remaining': 0,
+                'duress_detected': False
             }
         
         display_frame = frame.copy()
@@ -194,14 +197,27 @@ class LivenessDetector:
         
         head_pose = self.action_detector.detect_head_pose(debug_frame, face_rect)
         self.logger.debug(f"Head pose: {head_pose}")
-        self.challenge_manager.update(head_pose, self.blink_detector.blink_counter, 
-                                   self.speech_recognizer.get_last_speech())
+        last_speech = self.speech_recognizer.get_last_speech()
+        
+        # Check for failsafe word "verify"
+        if last_speech.lower() == "verify":
+            self.duress_detected = True
+            self.logger.info("Duress detected: 'verify' spoken")
+        
+        self.challenge_manager.update(head_pose, self.blink_detector.blink_counter, last_speech)
         
         challenge_text, action_completed, word_completed, verification_result = \
             self.challenge_manager.get_challenge_status()
         time_left = self.challenge_manager.get_challenge_time_remaining()
         self.logger.debug(f"Challenge status: text={challenge_text}, action={action_completed}, "
                          f"word={word_completed}, result={verification_result}, time={time_left:.1f}s")
+        
+        # Synchronize action and word verification
+        if word_completed and challenge_text:
+            target_action = challenge_text.split()[1].lower()  # e.g., "up" from "Look up and say sky"
+            action_completed = (head_pose == target_action)
+            self.logger.debug(f"Word spoken, verifying action: expected={target_action}, detected={head_pose}")
+            self.challenge_manager.action_completed = action_completed
         
         final_result = 'PENDING'
         exit_flag = False
@@ -213,12 +229,20 @@ class LivenessDetector:
             cv2.putText(debug_frame, f"Blinks: {self.blink_detector.blink_counter}", (10, 180),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             
-            if verification_result == "PASS":
+            if self.duress_detected:
+                self.status = "UNDER DURESS DETECTED"
+                cv2.putText(debug_frame, "UNDER DURESS DETECTED", (50, 220),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+                final_result = 'FAIL'
+                exit_flag = True
+            elif verification_result == "PASS":
+                self.status = "VERIFICATION PASSED"
                 cv2.putText(debug_frame, "VERIFICATION PASSED", (50, 220),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 1)
                 final_result = 'PASS'
                 exit_flag = True
             elif verification_result == "FAIL":
+                self.status = "VERIFICATION FAILED"
                 cv2.putText(debug_frame, "VERIFICATION FAILED", (50, 220),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                 final_result = 'FAIL'
@@ -237,10 +261,8 @@ class LivenessDetector:
                     (10, display_frame.shape[0] - 20),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
-        # Add head pose to debug frame
         cv2.putText(debug_frame, f"Head Pose: {head_pose if head_pose else 'None'}", (10, 210),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        
         cv2.putText(debug_frame, f"Challenge: {challenge_text}", (10, 30),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         cv2.putText(debug_frame, f"Action completed: {action_completed}", (10, 60),
@@ -250,11 +272,10 @@ class LivenessDetector:
         cv2.putText(debug_frame, f"Time left: {time_left:.1f}s", (10, 120),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
-        if action_completed:
-            self.liveness_score += 0.5
-        if word_completed:
-            self.liveness_score += 0.5
-        self.liveness_score = min(1.0, self.liveness_score)
+        if action_completed and word_completed:
+            self.liveness_score = 1.0
+        else:
+            self.liveness_score = 0.0
         
         self.logger.debug("Frame processing completed")
         return {
@@ -265,5 +286,6 @@ class LivenessDetector:
             'challenge_text': challenge_text,
             'action_completed': action_completed,
             'word_completed': word_completed,
-            'time_remaining': time_left
+            'time_remaining': time_left,
+            'duress_detected': self.duress_detected
         }
