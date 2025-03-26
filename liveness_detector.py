@@ -48,13 +48,7 @@ class LivenessDetector:
         self.status = "Analyzing..."
         self.liveness_score = 0.0
         
-        self.challenge_manager.issue_new_challenge()
-        self.speech_recognizer.start_listening()
-        
-        challenge_text, _, _, _ = self.challenge_manager.get_challenge_status()
-        if challenge_text:
-            target_word = challenge_text.split()[-1]
-            self.speech_recognizer.set_target_word(target_word)
+        self.start_challenge()
         self.logger.debug("LivenessDetector initialized")
     
     def detect_liveness(self, frame: np.ndarray) -> Tuple[np.ndarray, bool]:
@@ -106,7 +100,7 @@ class LivenessDetector:
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                 return display_frame, True
         else:
-            self.challenge_manager.issue_new_challenge()
+            self.start_challenge()
         
         self.face_detector.draw_face_info(display_frame, face_rect, self.status, self.liveness_score)
         
@@ -124,15 +118,18 @@ class LivenessDetector:
         self.consecutive_fake_frames = 0
         self.status = "Analyzing..."
         self.liveness_score = 0.0
+        self.start_challenge()
         self.logger.debug("LivenessDetector reset")
-    
+
     def start_challenge(self):
+        """Start a new challenge."""
         self.challenge_manager.issue_new_challenge()
+        self.speech_recognizer.start_listening()
         challenge_text, _, _, _ = self.challenge_manager.get_challenge_status()
         if challenge_text:
             target_word = challenge_text.split()[-1]
             self.speech_recognizer.set_target_word(target_word)
-        self.logger.debug("New challenge started")
+        self.logger.debug(f"New challenge started: {challenge_text}")
     
     def process_frame(self, frame):
         """Process a frame for liveness detection in the new approach."""
@@ -151,11 +148,12 @@ class LivenessDetector:
             }
         
         display_frame = frame.copy()
-        debug_frame = frame.copy()  # Always initialize debug_frame
+        debug_frame = frame.copy()
         self.logger.debug(f"Frame copied: shape={frame.shape}")
         
         face_roi, face_rect = self.face_detector.detect_face(display_frame)
         
+        head_pose = None
         if face_roi is None:
             self.logger.debug("No face detected")
             cv2.putText(display_frame, "No face detected", (30, 30),
@@ -228,7 +226,7 @@ class LivenessDetector:
             self.logger.debug(f"Verification result: {final_result}")
         else:
             if not challenge_text:
-                self.challenge_manager.issue_new_challenge()
+                self.start_challenge()
                 challenge_text, action_completed, word_completed, verification_result = \
                     self.challenge_manager.get_challenge_status()
                 time_left = self.challenge_manager.get_challenge_time_remaining()
@@ -237,6 +235,10 @@ class LivenessDetector:
         self.face_detector.draw_face_info(display_frame, face_rect, self.status, self.liveness_score)
         cv2.putText(display_frame, f"Speech: {self.speech_recognizer.get_last_speech()}",
                     (10, display_frame.shape[0] - 20),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        
+        # Add head pose to debug frame
+        cv2.putText(debug_frame, f"Head Pose: {head_pose if head_pose else 'None'}", (10, 210),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
         cv2.putText(debug_frame, f"Challenge: {challenge_text}", (10, 30),

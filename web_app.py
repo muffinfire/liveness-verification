@@ -124,15 +124,8 @@ def handle_reset(data):
     
     try:
         detector = active_sessions[session_id]['detector']
-        detector.challenge_manager.reset()
-        detector.blink_detector.reset()
-        new_challenge = detector.challenge_manager.issue_new_challenge()
-        
-        if new_challenge:
-            target_word = new_challenge.split()[-1]
-            detector.speech_recognizer.set_target_word(target_word)
-            logger.info(f"New challenge issued after reset: {new_challenge}")
-        
+        detector.reset()
+        logger.info(f"Reset detector for session {session_id}, new challenge issued")
         emit('reset_confirmed')
     except Exception as e:
         logger.error(f"Error resetting verification: {e}")
@@ -292,6 +285,9 @@ def handle_process_frame(data):
                         'result': result['verification_result'],
                         'code': code
                     }, room=requester_id)
+            elif result['verification_result'] == 'FAIL':
+                detector.reset()  # Reset on failure to start a new challenge
+                logger.info(f"Reset detector after failure for session {session_id}")
     except Exception as e:
         logger.error(f"Error processing frame: {e}")
         emit('error', {'message': str(e)})
