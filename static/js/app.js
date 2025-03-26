@@ -20,7 +20,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let stream = null;
     let verificationAttempts = 0;
     const MAX_VERIFICATION_ATTEMPTS = 3;
-    let isDebugMode = false; // Default to true, updated by server
+    let isDebugMode = true; // Set to true to show debug output
+    let showDebugFrame = true; // Set to true to show debug frame
+    let frameCount = 0;
     
     // Initialize Socket.IO connection
     function initSocket() {
@@ -28,139 +30,291 @@ document.addEventListener('DOMContentLoaded', () => {
         socket = io();
         
         socket.on('connect', () => {
-            console.log('Connected to server for verification');
+            if (isDebugMode) console.log('Connected to server for verification');
             socket.emit('join_verification', { code: sessionCode });
             socket.emit('get_debug_status');
-            console.log('Sent join_verification and get_debug_status events');
+            if (isDebugMode) console.log('Sent join_verification and get_debug_status events');
         });
         
         socket.on('debug_status', (data) => {
-            console.log('Received debug status:', data.debug);
             isDebugMode = data.debug;
-            
-            if (!isDebugMode) {
-                processedFrameContainer.classList.add('hidden');
-                videoContainer.classList.add('single-video');
-            } else {
-                processedFrameContainer.classList.remove('hidden');
-                videoContainer.classList.remove('single-video');
-                console.log('Debug mode enabled, showing processed frame container');
+            showDebugFrame = data.showDebugFrame;
+            if (isDebugMode) {
+                console.log(`Debug mode: ${isDebugMode}, Show debug frame: ${showDebugFrame}`);
             }
+            
+            isProcessing = true;  // Start processing frames after receiving debug status
+            
+            // Show/hide debug frame based on settings
+            debugFrame.style.display = showDebugFrame ? 'block' : 'none';
+        });
+        
+        socket.on('session_joined', (data) => {
+            console.log('Verification session joined:', data);
+            isProcessing = true;
         });
         
         socket.on('processed_frame', (data) => {
-            console.log('Received processed_frame event with data:', 
-                        {hasImage: !!data.image, hasDebugImage: !!data.debug_image, 
-                         timeRemaining: data.time_remaining});
-            handleProcessedFrame(data);
-        });
-        
-        socket.on('challenge', (data) => {
-            console.log('Received challenge:', data.text);
-            challengeText.textContent = data.text || 'Waiting for challenge...';
-        });
-        
-        socket.on('verification_started', (data) => {
-            console.log('Verification started');
-            isProcessing = true;
+            if (isDebugMode) {
+                console.log('Received processed frame:', {
+                    hasImage: !!data.image,
+                    hasDebugImage: !!data.debug_image,
+                    action_completed: data.action_completed,
+                    word_completed: data.word_completed,
+                    time_remaining: data.time_remaining
+                });
+            }
+            
+            // Update the processed frame image
+            if (data.image) {
+                processedFrame.src = data.image;
+            }
+            
+            // Update the debug frame if available
+            if (data.debug_image && showDebugFrame) {
+                debugFrame.src = data.debug_image;
+                debugFrame.style.display = 'block';
+            } else {
+                debugFrame.style.display = 'none';
+            }
+            
+            // Update challenge text and status
+            if (data.challenge) {
+                challengeText.textContent = data.challenge;
+                challengeText.classList.remove('hidden');
+            } else {
+                challengeText.textContent = 'Waiting for challenge...';
+            }
+            
+            // Update action status
+            actionStatus.textContent = data.action_completed ? '✓' : '○';
+            actionStatus.className = data.action_completed ? 'status-complete' : 'status-incomplete';
+            
+            // Update word status
+            wordStatus.textContent = data.word_completed ? '✓' : '○';
+            wordStatus.className = data.word_completed ? 'status-complete' : 'status-incomplete';
+            
+            // Update time remaining
+            if (data.time_remaining !== undefined) {
+                timeRemaining.textContent = Math.max(0, Math.ceil(data.time_remaining)) + 's';
+            }
+            
+            // Handle verification result
+            if (data.verification_result !== 'PENDING') {
+                isProcessing = false;
+                
+                if (data.verification_result === 'PASS') {
+                    resultText.textContent = 'Verification Successful!';
+                    resultText.className = 'result-text success';
+                    applyVideoEffect('success');
+                    
+                    // Redirect to main page after 3 seconds
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 3000);
+                } else {
+                    resultText.textContent = 'Verification Failed!';
+                    resultText.className = 'result-text failure';
+                    applyVideoEffect('failure');
+                    
+                    verificationAttempts++;
+                    if (verificationAttempts >= MAX_VERIFICATION_ATTEMPTS) {
+                        resultText.textContent = 'Maximum attempts reached. Verification failed.';
+                        setTimeout(() => {
+                            window.location.href = '/';
+                        }, 3000);
+                    } else {
+                        // Allow another attempt after 3 seconds
+                        setTimeout(() => {
+                            resultContainer.classList.add('hidden');
+                            isProcessing = true;
+                            removeVideoEffect();
+                        }, 3000);
+                    }
+                }
+                
+                resultContainer.classList.remove('hidden');
+            }
+            
+            // Continue processing frames if not paused
+            if (isProcessing) {
+                requestAnimationFrame(captureAndSendFrame);
+            }
+            if (isDebugMode) {
+                console.log('Debug frame status:', {
+                    hasDebugImage: !!data.debug_image,
+                    debugFrameElement: !!debugFrame,
+                    debugFrameClass: debugFrame.className,
+                    showDebugFrame: showDebugFrame
+                });
+            }
+            
+            if (isDebugMode) {
+                console.log('Processed frame response:', {
+                    hasImage: !!data.image,
+                    hasDebugImage: !!data.debug_image,
+                    challenge: data.challenge
+                });
+                
+                // Let's examine the actual URLs being set
+                if (data.image) {
+                    console.log('Image URL preview:', data.image.substring(0, 50) + '...');
+                }
+                if (data.debug_image) {
+                    console.log('Debug image URL preview:', data.debug_image.substring(0, 50) + '...');
+                }
+            }
         });
         
         socket.on('error', (data) => {
             console.error('Server error:', data.message);
-            alert('Error: ' + data.message);
+            alert('Server error: ' + data.message);
         });
         
-        socket.on('session_error', (data) => {
-            console.error('Session error:', data.message);
-            alert(data.message);
-            window.location.href = '/';
-        });
-    }
-    
-    // Handle server-processed frame data and update UI
-    function handleProcessedFrame(data) {
-        // Only update frames when we have new data
-        if (data.image) {
-            processedFrame.src = data.image;
-            processedFrame.classList.remove('hidden');
-        }
-        
-        // Only update debug frame if in debug mode and we have debug data
-        if (isDebugMode && debugFrame && data.debug_image) {
-            debugFrame.src = data.debug_image;
-            debugFrame.classList.remove('hidden');
-        } else if (!isDebugMode && debugFrame) {
-            debugFrame.classList.add('hidden');
-        }
-        
-        // Update timer only when time_remaining is provided
-        if (data.time_remaining !== undefined) {
-            timeRemaining.textContent = `${Math.round(data.time_remaining)}s`;
-        }
-        
-        if (data.challenge) {
-            challengeText.textContent = data.challenge;
-        }
-        actionStatus.textContent = data.action_completed ? '✅' : '❌';
-        wordStatus.textContent = data.word_completed ? '✅' : '❌';
-        
-        if (data.exit_flag) {
+        socket.on('max_attempts_reached', () => {
             isProcessing = false;
-            verificationAttempts++;
-            
+            resultText.textContent = 'Maximum verification attempts reached.';
             resultContainer.classList.remove('hidden');
-            if (data.verification_result === 'PASS') {
-                resultText.textContent = 'Verification Successful';
-                resultText.className = 'result-text success';
-            } else {
-                resultText.textContent = verificationAttempts >= MAX_VERIFICATION_ATTEMPTS 
-                  ? 'Verification Failed'
-                  : 'Verification Failed - Try Again';
-                resultText.className = 'result-text failure';
-                
-                if (verificationAttempts >= MAX_VERIFICATION_ATTEMPTS) {
-                    resetButton.classList.add('hidden');
-                }
-            }
-        }
-    }
-    
-    // Capture frames from webcam and send to server - reduce frequency for better performance
-    let frameCount = 0;
-    function captureAndSendFrame() {
-        frameCount++;
+            applyFailureEffect();
+        });
         
-        // Only send every 2nd or 3rd frame to reduce load
-        if (socket && socket.connected && stream && frameCount % 3 === 0) {
-            try {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        socket.on('disconnect', () => {
+            console.log('Disconnected from server');
+            isProcessing = false;
+        });
+        
+        socket.on('join_success', (data) => {
+            if (isDebugMode) {
+                console.log('Successfully joined verification session');
+            }
+            isProcessing = true;  // Set processing to true after successful join
+        });
+        
+        socket.on('challenge', (data) => {
+            if (isDebugMode) {
+                console.log('Received challenge:', data);
+            }
+            
+            // Update the challenge text in the UI
+            if (data && data.text) {
+                challengeText.textContent = data.text;
+            }
+        });
+        
+        socket.onAny((event, ...args) => {
+            if (isDebugMode) {
+                console.log(`Received socket event: ${event}`, args);
+            }
+            
+            // Force processing to start when any event is received after connection
+            if (event !== 'connect' && !isProcessing) {
+                console.log('Starting frame processing');
+                isProcessing = true;
                 
-                const imgData = canvas.toDataURL('image/jpeg', 0.6); // Lower quality for better performance
-                socket.emit('process_frame', {
-                    image: imgData,
-                    code: sessionCode
+                // Add this to ensure the frame capture interval is active
+                if (isDebugMode) console.log('Making sure frame capture interval is active');
+                
+                // This should restart the frame interval if it's not already running
+                startFrameCapture();
+            }
+        });
+        
+        // Add this event monitoring for processed_frame - don't modify existing code
+        socket.onAny((event) => {
+            // Only monitor for the processed_frame event to avoid console flooding
+            if (event === 'processed_frame' && isDebugMode) {
+                console.log('Detected processed_frame event!');
+            }
+        });
+        
+        // Add this at the end of your initialize function or after socket = io()
+        socket.on('connect', () => {
+            if (isDebugMode) {
+                console.log('Socket connection state:', {
+                    id: socket.id,
+                    connected: socket.connected,
+                    disconnected: socket.disconnected
                 });
-            } catch (err) {
-                console.error('Error capturing or sending frame:', err);
             }
-        }
-        
-        requestAnimationFrame(captureAndSendFrame);
+        });
     }
     
-    // Initialize webcam access
+    // Apply success effect to video
+    function applySuccessEffect() {
+        videoContainer.classList.add('success-overlay');
+        resultText.textContent = 'Verification successful!';
+        resultText.className = 'result-text success';
+        resultContainer.classList.remove('hidden');
+    }
+    
+    // Apply failure effect to video
+    function applyFailureEffect() {
+        videoContainer.classList.add('failure-overlay');
+        resultText.textContent = 'Verification failed. Please try again.';
+        resultText.className = 'result-text failure';
+        resultContainer.classList.remove('hidden');
+    }
+    
+    // Remove video effects
+    function removeVideoEffect() {
+        videoContainer.classList.remove('success-overlay', 'failure-overlay');
+        resultContainer.classList.add('hidden');
+    }
+    
+    // Handle verification result
+    function handleVerificationResult(result) {
+        if (result === 'PASS') {
+            resultText.textContent = 'Verification successful!';
+            resultText.className = 'result-text success';
+        } else if (result === 'FAIL') {
+            resultText.textContent = 'Verification failed.';
+            resultText.className = 'result-text failure';
+        }
+    }
+    
+    // Capture and send frame to server
+    function captureAndSendFrame() {
+        if (!isProcessing) {
+            if (isDebugMode) console.log('Not processing frames - isProcessing is false');
+            return;
+        }
+        
+        if (isDebugMode) console.log('Processing frames - capturing and sending frame');
+        
+        try {
+            // Draw video frame to canvas
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            // Get image data from canvas
+            const imageData = canvas.toDataURL('image/jpeg', 0.8);
+            
+            if (isDebugMode) console.log(`Sending frame ${frameCount} to server`);
+            
+            // Send to server
+            socket.emit('process_frame', {
+                image: imageData,
+                code: sessionCode
+            });
+            
+            frameCount++;
+            if (isDebugMode && frameCount % 30 === 0) {
+                console.log(`Sent ${frameCount} frames`);
+            }
+        } catch (err) {
+            console.error('Error capturing frame:', err);
+        }
+    }
+    
+    // Initialize webcam
     async function initWebcam() {
         try {
-            console.log('Requesting webcam access...');
             stream = await navigator.mediaDevices.getUserMedia({
                 video: {
                     width: { ideal: 640 },
                     height: { ideal: 480 },
                     facingMode: 'user'
                 },
-                audio: false
+                audio: true
             });
             video.srcObject = stream;
             console.log('Webcam access granted, waiting for video to load');
@@ -182,39 +336,14 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('Sending reset request');
             socket.emit('reset', { code: sessionCode });
             resultContainer.classList.add('hidden');
-            isProcessing = false;
+            isProcessing = true;
+            removeVideoEffect();
         }
     });
-    
-    // Make sure we're properly initializing the UI elements
-    function initUI() {
-        console.log('Initializing UI elements');
-        
-        // Make sure we only have the correct video elements
-        if (processedFrameContainer) {
-            // Remove any extra video elements that might have been created
-            while (processedFrameContainer.children.length > 1) {
-                processedFrameContainer.removeChild(processedFrameContainer.lastChild);
-            }
-            
-            // Make sure we have the debug frame
-            if (!debugFrame && isDebugMode) {
-                debugFrame = document.createElement('img');
-                debugFrame.classList.add('debug-frame');
-                processedFrameContainer.appendChild(debugFrame);
-            }
-        }
-        
-        // Initially hide debug frame if not in debug mode
-        if (!isDebugMode && debugFrame) {
-            debugFrame.classList.add('hidden');
-        }
-    }
     
     // Initialize everything
     function init() {
         console.log('Initializing verification page');
-        initUI();
         initSocket();
         initWebcam();
     }
@@ -228,6 +357,16 @@ document.addEventListener('DOMContentLoaded', () => {
             stream.getTracks().forEach(track => track.stop());
         }
     });
+    
+    // Add this helper function that should already exist in your code
+    function startFrameCapture() {
+        if (isDebugMode) console.log('Starting frame capture interval');
+        // Call captureAndSendFrame immediately once
+        captureAndSendFrame();
+        
+        // Then set up interval - use a reasonably fast interval (100ms = 10fps)
+        setInterval(captureAndSendFrame, 100);
+    }
     
     init();
 });

@@ -173,3 +173,62 @@ class BlinkDetector:
         self.blink_detected = False
         self.blink_frames = 0
         self.eye_state = "open"
+
+    def detect_blinks_with_debug(self, frame, face_rect, face_roi):
+        """
+        Detect blinks and draw detailed eye information on the debug frame.
+        Similar to detect_blinks but with additional debug visualization.
+        """
+        if not self.using_dlib:
+            return 0
+        
+        # Convert face_roi to grayscale for dlib
+        gray_roi = cv2.cvtColor(face_roi, cv2.COLOR_BGR2GRAY)
+        
+        # Convert OpenCV face rect to dlib rect
+        x, y, w, h = face_rect
+        dlib_rect = dlib.rectangle(x, y, x + w, y + h)
+        
+        # Get facial landmarks
+        landmarks = self.dlib_predictor(gray_roi, dlib_rect)
+        
+        # Calculate Eye Aspect Ratio (EAR)
+        left_eye_coords = np.array([(landmarks.part(i).x, landmarks.part(i).y) 
+                                   for i in range(36, 42)])
+        right_eye_coords = np.array([(landmarks.part(i).x, landmarks.part(i).y) 
+                                    for i in range(42, 48)])
+        
+        # Draw eye polygons
+        cv2.polylines(frame, [left_eye_coords], True, (0, 255, 0), 1)
+        cv2.polylines(frame, [right_eye_coords], True, (0, 255, 0), 1)
+        
+        # Calculate EAR
+        left_ear = self.calculate_ear(left_eye_coords)
+        right_ear = self.calculate_ear(right_eye_coords)
+        ear = (left_ear + right_ear) / 2.0
+        self.last_ear = ear
+        
+        # Draw EAR value for each eye
+        left_center = np.mean(left_eye_coords, axis=0).astype(int)
+        right_center = np.mean(right_eye_coords, axis=0).astype(int)
+        
+        cv2.putText(frame, f"L: {left_ear:.2f}", 
+                    (left_center[0] - 20, left_center[1] - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+        cv2.putText(frame, f"R: {right_ear:.2f}", 
+                    (right_center[0] - 20, right_center[1] - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+        
+        # Check for blink
+        current_time = time.time()
+        if ear < self.blink_threshold:
+            self.frames_below_threshold += 1
+        else:
+            if (self.frames_below_threshold >= self.min_blink_frames and
+                    current_time - self.last_blink_time > self.min_blink_interval):
+                self.blink_counter += 1
+                self.last_blink_time = current_time
+                print(f"Blink detected! Count: {self.blink_counter}")
+            self.frames_below_threshold = 0
+        
+        return self.blink_counter

@@ -2,7 +2,14 @@
 
 class Config:
     # Debug mode
-    DEBUG = False
+    DEBUG = True
+    
+    # Show debug frame with eye tracking polygons, EAR values, etc.
+    SHOW_DEBUG_FRAME = False
+    
+    # Camera settings
+    CAMERA_WIDTH = 640
+    CAMERA_HEIGHT = 480
     
     # Face detection parameters
     FACE_CONFIDENCE_THRESHOLD = 0.9
@@ -13,22 +20,39 @@ class Config:
     HEAD_POSE_THRESHOLD_Y_UP = 0.08  # 8% for looking up
     HEAD_POSE_THRESHOLD_Y_DOWN = 0.10  # 10% for looking down
     
+    # History lengths for tracking
+    LANDMARK_HISTORY_MAX = 30  # Maximum frames to keep in landmark history
+    FACE_POSITION_HISTORY_LENGTH = 30  # Length of face position/angle history
+    
     # Blink detection parameters
     BLINK_THRESHOLD = 0.25  # EAR threshold for blink detection
     MIN_BLINK_FRAMES = 1  # Minimum consecutive frames below threshold to count as blink
     MIN_BLINK_INTERVAL = 0.1  # Minimum time between blinks (seconds)
     
     # Challenge parameters
-    CHALLENGE_TIMEOUT = 10  # seconds (increased from 10)
-    ACTION_SPEECH_WINDOW = 5.0  # seconds allowed between action and speech (increased from 3.0)
+    CHALLENGE_TIMEOUT = 10  # seconds
+    ACTION_SPEECH_WINDOW = 5.0  # seconds allowed between action and speech
     
     # Speech recognition parameters
-    SPEECH_TIMEOUT = 5  # seconds (reduced from 5)
-    SPEECH_PHRASE_LIMIT = 2  # seconds (reduced from 3)
+    SPEECH_TIMEOUT = 5  # seconds
+    SPEECH_PHRASE_LIMIT = 2  # seconds
+    SPEECH_SAMPLING_RATE = 16000
+    SPEECH_BUFFER_SIZE = 1024
+    SPEECH_KEYWORDS = [
+        "blue /1e-3/",
+        "red /1e-3/",
+        "sky /1e-3/",
+        "ground /1e-3/",
+        "hello /1e-3/",
+        "noise /1e-1/"
+    ]
     
     # Liveness scoring
     MIN_CONSECUTIVE_LIVE_FRAMES = 5
     MIN_CONSECUTIVE_FAKE_FRAMES = 5
+    
+    # Logging
+    LOGGING_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     
     # Available challenges
     CHALLENGES = [

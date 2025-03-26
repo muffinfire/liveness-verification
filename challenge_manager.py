@@ -145,3 +145,17 @@ class ChallengeManager:
             return 0
         elapsed = time.time() - self.challenge_start_time
         return max(0, self.challenge_timeout - elapsed)
+    
+    def update(self, blink_counter: int, head_pose: str, last_speech: str) -> None:
+        """
+        Update the challenge manager with the latest detection results.
+        This method is called every frame to check challenge status.
+        
+        Args:
+            blink_counter: Number of blinks detected
+            head_pose: Current head pose ("left", "right", "up", "down", etc.)
+            last_speech: Last recognized speech
+        """
+        # This is a simple passthrough to verify_challenge
+        if self.current_challenge:
+            self.verify_challenge(head_pose, blink_counter, last_speech)

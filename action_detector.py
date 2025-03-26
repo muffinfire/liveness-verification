@@ -30,61 +30,23 @@ class ActionDetector:
         self.current_action = None
         self.action_completed = False
         self.action_start_time = None
-        self.landmark_history = []  # Store recent landmarks for tracking movement
-        self.max_history = 30  # Maximum number of frames to keep in history
         
         # Head pose tracking
-        self.face_positions = deque(maxlen=30)
-        self.face_angles = deque(maxlen=30)
+        self.face_positions = deque(maxlen=config.FACE_POSITION_HISTORY_LENGTH)
+        self.face_angles = deque(maxlen=config.FACE_POSITION_HISTORY_LENGTH)
         self.head_pose = "center"  # center, left, right, up, down
-        
-        # Thresholds for different actions
-        self.nod_threshold = 0.15  # Vertical movement threshold for nodding
-        self.shake_threshold = 0.15  # Horizontal movement threshold for shaking
-        self.tilt_threshold = 0.15  # Rotation threshold for tilting
     
     def set_action(self, action: str) -> None:
         """
         Set the current action to detect.
         
         Args:
-            action: Action name ("nod", "shake", "tilt")
+            action: Action name ("left", "right", "up", "down")
         """
         self.current_action = action
         self.action_completed = False
         self.action_start_time = None
-        self.landmark_history = []
         self.logger.debug(f"Action set to: {action}")
-    
-    def get_landmarks(self, frame: np.ndarray, face_rect: Tuple[int, int, int, int]) -> Optional[np.ndarray]:
-        """
-        Get facial landmarks using dlib.
-        
-        Args:
-            frame: Input video frame
-            face_rect: Face rectangle (x, y, w, h)
-            
-        Returns:
-            Array of facial landmarks or None if detection fails
-        """
-        if not self.using_dlib:
-            return None
-            
-        x, y, w, h = face_rect
-        
-        # Convert to dlib rectangle
-        rect = dlib.rectangle(x, y, x+w, y+h)
-        
-        # Get facial landmarks
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        landmarks = self.dlib_predictor(gray, rect)
-        
-        # Convert to numpy array
-        points = np.zeros((68, 2), dtype=np.float32)
-        for i in range(68):
-            points[i] = (landmarks.part(i).x, landmarks.part(i).y)
-            
-        return points
     
     def detect_head_pose(self, frame: np.ndarray, face_rect: Tuple[int, int, int, int]) -> str:
         """
@@ -171,140 +133,10 @@ class ActionDetector:
         if self.current_action is None or face_rect is None:
             return False
             
-        try:
-            landmarks = self.get_landmarks(frame, face_rect)
-        except Exception as e:
-            self.logger.error(f"Error extracting landmarks: {e}")
-            return False
-        
-        if landmarks is not None:
-            self.landmark_history.append(landmarks)
-            if len(self.landmark_history) > self.max_history:
-                self.landmark_history.pop(0)
-        
-        # Detect the specified action
-        if self.current_action.lower() == "nod":
-            self.action_completed = self.detect_nod(landmarks)
-        elif self.current_action.lower() == "shake":
-            self.action_completed = self.detect_shake(landmarks)
-        elif self.current_action.lower() == "tilt":
-            self.action_completed = self.detect_tilt(landmarks)
-        elif self.current_action.lower() in ["left", "right", "up", "down"]:
-            current_pose = self.detect_head_pose(frame, face_rect)
-            self.action_completed = current_pose.lower() == self.current_action.lower()
-        else:
-            self.logger.warning(f"Unknown action: {self.current_action}")
+        current_pose = self.detect_head_pose(frame, face_rect)
+        self.action_completed = current_pose.lower() == self.current_action.lower()
         
         return self.action_completed
-    
-    def detect_nod(self, landmarks: np.ndarray) -> bool:
-        """
-        Detect head nodding (up and down movement).
-        
-        Args:
-            landmarks: Current facial landmarks
-            
-        Returns:
-            True if nodding is detected, False otherwise
-        """
-        if landmarks is None or len(self.landmark_history) < 5:
-            return False
-            
-        # Use nose tip (point 30) for tracking vertical movement
-        nose_y_positions = [lm[30][1] for lm in self.landmark_history[-10:]]
-        
-        # Calculate vertical movement
-        min_y = min(nose_y_positions)
-        max_y = max(nose_y_positions)
-        movement_range = max_y - min_y
-        
-        # Check if movement exceeds threshold
-        frame_height = 480  # Assuming standard frame height
-        normalized_movement = movement_range / frame_height
-        
-        # Check for direction changes (at least 2 for a nod)
-        direction_changes = 0
-        for i in range(1, len(nose_y_positions) - 1):
-            if (nose_y_positions[i-1] < nose_y_positions[i] and 
-                nose_y_positions[i] > nose_y_positions[i+1]) or \
-               (nose_y_positions[i-1] > nose_y_positions[i] and 
-                nose_y_positions[i] < nose_y_positions[i+1]):
-                direction_changes += 1
-        
-        if normalized_movement > self.nod_threshold and direction_changes >= 2:
-            self.logger.debug(f"Nod detected! Movement: {normalized_movement:.2f}, Changes: {direction_changes}")
-            return True
-            
-        return False
-    
-    def detect_shake(self, landmarks: np.ndarray) -> bool:
-        """
-        Detect head shaking (left and right movement).
-        
-        Args:
-            landmarks: Current facial landmarks
-            
-        Returns:
-            True if shaking is detected, False otherwise
-        """
-        if landmarks is None or len(self.landmark_history) < 5:
-            return False
-            
-        # Use nose tip (point 30) for tracking horizontal movement
-        nose_x_positions = [lm[30][0] for lm in self.landmark_history[-10:]]
-        
-        # Calculate horizontal movement
-        min_x = min(nose_x_positions)
-        max_x = max(nose_x_positions)
-        movement_range = max_x - min_x
-        
-        # Check if movement exceeds threshold
-        frame_width = 640  # Assuming standard frame width
-        normalized_movement = movement_range / frame_width
-        
-        # Check for direction changes (at least 2 for a shake)
-        direction_changes = 0
-        for i in range(1, len(nose_x_positions) - 1):
-            if (nose_x_positions[i-1] < nose_x_positions[i] and 
-                nose_x_positions[i] > nose_x_positions[i+1]) or \
-               (nose_x_positions[i-1] > nose_x_positions[i] and 
-                nose_x_positions[i] < nose_x_positions[i+1]):
-                direction_changes += 1
-        
-        if normalized_movement > self.shake_threshold and direction_changes >= 2:
-            self.logger.debug(f"Shake detected! Movement: {normalized_movement:.2f}, Changes: {direction_changes}")
-            return True
-            
-        return False
-    
-    def detect_tilt(self, landmarks: np.ndarray) -> bool:
-        """
-        Detect head tilting (rotation).
-        
-        Args:
-            landmarks: Current facial landmarks
-            
-        Returns:
-            True if tilting is detected, False otherwise
-        """
-        if landmarks is None or len(self.landmark_history) < 5:
-            return False
-            
-        # Use eyes to detect tilt (angle between eyes)
-        left_eye = landmarks[36:42].mean(axis=0)
-        right_eye = landmarks[42:48].mean(axis=0)
-        
-        # Calculate angle
-        dx = right_eye[0] - left_eye[0]
-        dy = right_eye[1] - left_eye[1]
-        angle = np.degrees(np.arctan2(dy, dx))
-        
-        # Check if tilt exceeds threshold
-        if abs(angle) > self.tilt_threshold:
-            self.logger.debug(f"Tilt detected! Angle: {angle:.2f}")
-            return True
-            
-        return False
     
     def is_action_completed(self):
         """Check if the current action is completed."""

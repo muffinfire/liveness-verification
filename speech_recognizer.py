@@ -47,8 +47,8 @@ class SpeechRecognizer:
             
             self.speech = LiveSpeech(
                 verbose=False,
-                sampling_rate=16000,
-                buffer_size=1024,
+                sampling_rate=config.SPEECH_SAMPLING_RATE,
+                buffer_size=config.SPEECH_BUFFER_SIZE,
                 no_search=False,
                 full_utt=False,
                 kws=self.keyword_file
