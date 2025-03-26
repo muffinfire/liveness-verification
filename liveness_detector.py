@@ -120,28 +120,28 @@ class LivenessDetector:
             
             # Display challenge status
             cv2.putText(display_frame, f"Challenge: {challenge_text}", (10, 30), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             
             time_remaining = self.challenge_manager.get_challenge_time_remaining()
             cv2.putText(display_frame, f"Time: {time_remaining:.1f}s", (10, 60), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             
             # Display action and word status
             action_status = "✓" if action_completed else "✗"
             word_status = "✓" if word_completed else "✗"
             cv2.putText(display_frame, f"Action: {action_status}", (10, 90), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             cv2.putText(display_frame, f"Word: {word_status}", (10, 120), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             
             # Check verification result
             if verification_result == "PASS":
                 cv2.putText(display_frame, "VERIFICATION PASSED", (50, 200), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                 return display_frame, True
             elif verification_result == "FAIL":
                 cv2.putText(display_frame, "VERIFICATION FAILED", (50, 200), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                 return display_frame, True
         else:
             # Issue a new challenge if none is active
@@ -152,7 +152,7 @@ class LivenessDetector:
         
         # Display speech recognition status
         cv2.putText(display_frame, f"Speech: {last_speech}", (10, display_frame.shape[0]-20), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
         return display_frame, False
 
@@ -202,9 +202,9 @@ class LivenessDetector:
         
         if face_roi is None:
             cv2.putText(display_frame, "No face detected", (30, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
             cv2.putText(debug_frame, "No face detected", (30, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
         
             return {
                 'display_frame': display_frame,
@@ -271,20 +271,20 @@ class LivenessDetector:
         if verification_result != "PENDING":
             # Add debug info to debug frame
             cv2.putText(debug_frame, f"Action: {action_detected}", (10, 120),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             cv2.putText(debug_frame, f"Speech: {last_speech}", (10, 150),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             cv2.putText(debug_frame, f"Blinks: {self.blink_detector.blink_counter}", (10, 180),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             
             if verification_result == "PASS":
                 cv2.putText(debug_frame, "VERIFICATION PASSED", (50, 220),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 1)
                 final_result = 'PASS'
                 exit_flag = True
             elif verification_result == "FAIL":
                 cv2.putText(debug_frame, "VERIFICATION FAILED", (50, 220),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                 final_result = 'FAIL'
                 exit_flag = True
         else:
@@ -300,19 +300,27 @@ class LivenessDetector:
         self.face_detector.draw_face_info(display_frame, face_rect, self.status, self.liveness_score)
         cv2.putText(display_frame, f"Speech: {last_speech}",
                     (10, display_frame.shape[0] - 20),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
         # Always add debug info to debug frame
         cv2.putText(debug_frame, f"Challenge: {challenge_text}", (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         cv2.putText(debug_frame, f"Action completed: {action_completed}", (10, 60),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         cv2.putText(debug_frame, f"Word completed: {word_completed}", (10, 90),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         cv2.putText(debug_frame, f"Time left: {time_left:.1f}s", (10, 120),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         cv2.putText(debug_frame, f"Blinks: {self.blink_detector.blink_counter}", (10, 150),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        
+        # Update liveness score based on challenge progress
+        if action_completed:
+            self.liveness_score += 0.5
+        if word_completed:
+            self.liveness_score += 0.5
+        # Cap score at 1.0
+        self.liveness_score = min(1.0, self.liveness_score)
         
         return {
             'display_frame': display_frame,

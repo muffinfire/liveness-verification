@@ -419,4 +419,20 @@ input[type="text"]:focus {
     box-shadow: 0 0 20px 10px rgba(231, 76, 60, 0.6);
     filter: sepia(0.3) saturate(1.5) brightness(0.9) hue-rotate(-20deg);
     border: 3px solid #e74c3c;
+}
+
+/* Update the debug frame styles */
+#debug-frame {
+    width: 100%;
+    height: auto;
+    border-radius: 12px;
+    border: 1px solid #333;
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+    object-fit: contain; /* Keep aspect ratio */
+}
+
+#processed-frame-container, .video-wrapper {
+    width: 48%;
+    max-width: 640px;
+    height: auto;
 } 

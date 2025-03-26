@@ -5,7 +5,7 @@ class Config:
     DEBUG = True
     
     # Show debug frame with eye tracking polygons, EAR values, etc.
-    SHOW_DEBUG_FRAME = False
+    SHOW_DEBUG_FRAME = True
     
     # Camera settings
     CAMERA_WIDTH = 640

@@ -40,6 +40,9 @@ active_sessions: Dict[str, Dict[str, Any]] = {}
 # Store verification codes
 verification_codes: Dict[str, Dict[str, Any]] = {}
 
+# Add this at the top of the file
+last_log_time = {}
+
 @app.route('/')
 def index():
     """Render the main landing page."""
@@ -264,11 +267,15 @@ def handle_join_verification(data):
 @socketio.on('process_frame')
 def handle_process_frame(data):
     """Process a frame from the client."""
+    global last_log_time
     session_id = request.sid
     code = data.get('code')
     
-    if config.DEBUG:  # Only log if debug is enabled
+    # Only log once per second per session
+    current_time = time.time()
+    if config.DEBUG and (session_id not in last_log_time or current_time - last_log_time.get(session_id, 0) >= 1.0):
         logger.debug(f"Processing frame for session {session_id}, code {code}")
+        last_log_time[session_id] = current_time
     
     if session_id not in active_sessions:
         logger.warning(f"Received frame from unknown session: {session_id}")  # Keep warnings

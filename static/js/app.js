@@ -2,9 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const video = document.getElementById('webcam');
     const canvas = document.getElementById('overlay');
     const ctx = canvas.getContext('2d');
-    const processedFrame = document.getElementById('processed-frame');
     const debugFrame = document.getElementById('debug-frame');
-    const processedFrameContainer = document.getElementById('processed-frame-container');
     const challengeText = document.getElementById('challenge-text');
     const actionStatus = document.getElementById('action-status');
     const wordStatus = document.getElementById('word-status');
@@ -55,7 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         socket.on('processed_frame', (data) => {
-            if (isDebugMode) {
+            if (isDebugMode && frameCount % 30 === 0) {
                 console.log('Received processed frame:', {
                     hasImage: !!data.image,
                     hasDebugImage: !!data.debug_image,
@@ -65,17 +63,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
             
-            // Update the processed frame image
-            if (data.image) {
-                processedFrame.src = data.image;
-            }
-            
-            // Update the debug frame if available
-            if (data.debug_image && showDebugFrame) {
-                debugFrame.src = data.debug_image;
-                debugFrame.style.display = 'block';
-            } else {
-                debugFrame.style.display = 'none';
+            // Send all data to the debug frame instead
+            if (data.image && debugFrame) {
+                debugFrame.src = data.debug_image || data.image;
+                debugFrame.style.display = showDebugFrame ? 'block' : 'none';
             }
             
             // Update challenge text and status
@@ -87,11 +78,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             // Update action status
-            actionStatus.textContent = data.action_completed ? '✓' : '○';
+            actionStatus.textContent = data.action_completed ? '✅' : '❌';
             actionStatus.className = data.action_completed ? 'status-complete' : 'status-incomplete';
             
             // Update word status
-            wordStatus.textContent = data.word_completed ? '✓' : '○';
+            wordStatus.textContent = data.word_completed ? '✅' : '❌';
             wordStatus.className = data.word_completed ? 'status-complete' : 'status-incomplete';
             
             // Update time remaining
@@ -162,6 +153,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 if (data.debug_image) {
                     console.log('Debug image URL preview:', data.debug_image.substring(0, 50) + '...');
+                }
+            }
+            
+            // Add this to the processed_frame handler, right after the time remaining update
+            if (data.time_remaining <= 0 && data.verification_result === 'PENDING') {
+                // Time expired but no conclusive result yet - force reset
+                if (isDebugMode) console.log('Challenge timed out, resetting');
+                socket.emit('reset', { code: sessionCode });
+                verificationAttempts++;
+                
+                if (verificationAttempts >= MAX_VERIFICATION_ATTEMPTS) {
+                    resultText.textContent = 'Maximum attempts reached. Verification failed.';
+                    resultText.className = 'result-text failure';
+                    resultContainer.classList.remove('hidden');
+                    isProcessing = false;
+                } else {
+                    // Tell user what happened
+                    challengeText.textContent = `Attempt ${verificationAttempts+1} of ${MAX_VERIFICATION_ATTEMPTS}...`;
+                    setTimeout(() => {
+                        challengeText.textContent = 'Waiting for new challenge...';
+                    }, 2000);
                 }
             }
         });
