@@ -25,14 +25,7 @@ class SpeechRecognizer:
         
         try:
             self.logger.info("Initializing PocketSphinx...")
-            keywords = [
-                "blue /1e-3/",
-                "red /1e-3/",
-                "sky /1e-3/",
-                "ground /1e-3/",
-                "hello /1e-3/",
-                "noise /1e-1/"
-            ]
+            keywords = config.SPEECH_KEYWORDS
             self.keyword_file = tempfile.NamedTemporaryFile(mode='w', delete=False).name
             with open(self.keyword_file, "w") as f:
                 for kw in keywords:
@@ -63,7 +56,6 @@ class SpeechRecognizer:
             self.speech_ready = False
 
     def set_target_word(self, word: str) -> None:
-        """Sets the target word for the current challenge."""
         self.target_word = word.lower().strip()
         self.logger.info(f"Target word set to: {self.target_word}")
     
@@ -92,7 +84,7 @@ class SpeechRecognizer:
                     self.logger.info(f"Target word recognized: {self.target_word}")
                     continue
 
-                # Otherwise, process the recognized keywords.
+                # Otherwise, process recognized keywords.
                 possible_keywords = ["blue", "red", "sky", "ground", "hello", "noise"]
                 first_word = None
                 for k in possible_keywords:
@@ -108,6 +100,7 @@ class SpeechRecognizer:
                         last_time = now
                         self.logger.debug("Detected 'noise' => ignoring")
                     else:
+                        # Avoid spamming if the same word repeats in <1s
                         if (first_word != last_detected_word) or ((now - last_time) > 1.0):
                             with self.speech_lock:
                                 self.last_speech = first_word

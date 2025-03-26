@@ -45,6 +45,9 @@ class BlinkDetector:
         self.ear_history = deque(maxlen=30)
         self.eye_state = "open"  # can be "open", "closing", "closed", "opening"
         self.eye_state_start = time.time()
+
+        # [CHANGED] Rate-limit debug logs to once per second
+        self.last_debug_time = 0.0
     
     def calculate_ear(self, eye_points: np.ndarray) -> float:
         # Eye Aspect Ratio
@@ -75,40 +78,46 @@ class BlinkDetector:
         avg_ear = (left_ear + right_ear) / 2.0
         self.ear_history.append(avg_ear)
         
-        # Draw eye contours for debugging
-        for eye in [left_eye, right_eye]:
-            for i in range(len(eye)):
-                pt1 = tuple(eye[i])
-                pt2 = tuple(eye[(i+1) % 6])
-                cv2.line(frame, pt1, pt2, (0,255,0), 1)
+        # Draw eye contours for debugging, rate-limited
+        now = time.time()
+        if now - self.last_debug_time > 1.0:
+            for eye in [left_eye, right_eye]:
+                for i in range(len(eye)):
+                    pt1 = tuple(eye[i])
+                    pt2 = tuple(eye[(i+1) % 6])
+                    cv2.line(frame, pt1, pt2, (0,255,0), 1)
         
-        self.logger.debug(f"EAR: {avg_ear:.2f} (Threshold: {self.blink_threshold:.2f})")
+        # [CHANGED] Rate-limit debug logs
+        if now - self.last_debug_time > 1.0:
+            self.logger.debug(f"EAR: {avg_ear:.2f} (Threshold: {self.blink_threshold:.2f})")
         
-        current_time = time.time()
         blink_detected_now = False
         
         if avg_ear < self.blink_threshold:
             self.blink_frames += 1
             if self.eye_state == "open":
                 self.eye_state = "closing"
-                self.eye_state_start = current_time
+                self.eye_state_start = now
             elif (self.eye_state == "closing"
-                  and (current_time - self.eye_state_start) > 0.1):
+                  and (now - self.eye_state_start) > 0.1):
                 self.eye_state = "closed"
-                self.eye_state_start = current_time
+                self.eye_state_start = now
         else:
             if (self.eye_state == "closed"
                 and self.blink_frames >= self.min_blink_frames
-                and (current_time - self.last_blink_time) > self.config.MIN_BLINK_INTERVAL):
+                and (now - self.last_blink_time) > self.config.MIN_BLINK_INTERVAL):
                 self.blink_counter += 1
                 self.blink_detected = True
                 blink_detected_now = True
-                self.last_blink_time = current_time
-                self.logger.info(f"BLINK DETECTED! Counter: {self.blink_counter}")
+                
+                # [CHANGED] Rate-limit "BLINK DETECTED" info
+                if now - self.last_debug_time > 1.0:
+                    self.logger.info(f"BLINK DETECTED! Counter: {self.blink_counter}")
+                
+                self.last_blink_time = now
             
-            # revert to open or opening
             self.eye_state = "open" if self.eye_state != "closed" else "opening"
-            self.eye_state_start = current_time
+            self.eye_state_start = now
             self.blink_frames = 0
         
         # Display EAR + blink count in face ROI
@@ -117,6 +126,10 @@ class BlinkDetector:
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,255),1)
         cv2.putText(face_roi, f"Blinks: {self.blink_counter}", (10,20),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,255),1)
+        
+        # Update debug timestamp if needed
+        if now - self.last_debug_time > 1.0:
+            self.last_debug_time = now
         
         return blink_detected_now
     
@@ -136,23 +149,29 @@ class BlinkDetector:
         
         x,y,w,h = face_rect
         blink_detected_now = False
+        now = time.time()
+        
         if len(eyes)==0:
-            current_time = time.time()
-            if (current_time - self.last_blink_time) > self.config.MIN_BLINK_INTERVAL:
+            if (now - self.last_blink_time) > self.config.MIN_BLINK_INTERVAL:
                 self.blink_counter += 1
                 self.blink_detected = True
                 blink_detected_now = True
                 self.logger.debug(f"BLINK DETECTED! Counter: {self.blink_counter}")
-                self.last_blink_time = current_time
+                self.last_blink_time = now
         else:
             # draw eyes for debug
-            for (ex,ey,ew,eh) in eyes:
-                cv2.rectangle(frame, (x+ex,y+ey), (x+ex+ew, y+ey+eh), (0,255,0),1)
+            if now - self.last_debug_time > 1.0:
+                for (ex,ey,ew,eh) in eyes:
+                    cv2.rectangle(frame, (x+ex,y+ey), (x+ex+ew, y+ey+eh), (0,255,0),1)
         
         # show blink count
         roi = frame[y : y+h, x : x+w]
         cv2.putText(roi, f"Blinks: {self.blink_counter}", (10,20),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,255),1)
+        
+        if now - self.last_debug_time > 1.0:
+            self.last_debug_time = now
+        
         return blink_detected_now
     
     def detect_blinks(self,
@@ -173,62 +192,6 @@ class BlinkDetector:
         self.blink_detected = False
         self.blink_frames = 0
         self.eye_state = "open"
-
-    def detect_blinks_with_debug(self, frame, face_rect, face_roi):
-        """
-        Detect blinks and draw detailed eye information on the debug frame.
-        Similar to detect_blinks but with additional debug visualization.
-        """
-        if not self.using_dlib:
-            return 0
-        
-        # Convert face_roi to grayscale for dlib
-        gray_roi = cv2.cvtColor(face_roi, cv2.COLOR_BGR2GRAY)
-        
-        # Convert OpenCV face rect to dlib rect
-        x, y, w, h = face_rect
-        dlib_rect = dlib.rectangle(x, y, x + w, y + h)
-        
-        # Get facial landmarks
-        landmarks = self.dlib_predictor(gray_roi, dlib_rect)
-        
-        # Calculate Eye Aspect Ratio (EAR)
-        left_eye_coords = np.array([(landmarks.part(i).x, landmarks.part(i).y) 
-                                   for i in range(36, 42)])
-        right_eye_coords = np.array([(landmarks.part(i).x, landmarks.part(i).y) 
-                                    for i in range(42, 48)])
-        
-        # Draw eye polygons
-        cv2.polylines(frame, [left_eye_coords], True, (0, 255, 0), 1)
-        cv2.polylines(frame, [right_eye_coords], True, (0, 255, 0), 1)
-        
-        # Calculate EAR
-        left_ear = self.calculate_ear(left_eye_coords)
-        right_ear = self.calculate_ear(right_eye_coords)
-        ear = (left_ear + right_ear) / 2.0
-        self.last_ear = ear
-        
-        # Draw EAR value for each eye
-        left_center = np.mean(left_eye_coords, axis=0).astype(int)
-        right_center = np.mean(right_eye_coords, axis=0).astype(int)
-        
-        cv2.putText(frame, f"L: {left_ear:.2f}", 
-                    (left_center[0] - 20, left_center[1] - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-        cv2.putText(frame, f"R: {right_ear:.2f}", 
-                    (right_center[0] - 20, right_center[1] - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-        
-        # Check for blink
-        current_time = time.time()
-        if ear < self.blink_threshold:
-            self.frames_below_threshold += 1
-        else:
-            if (self.frames_below_threshold >= self.min_blink_frames and
-                    current_time - self.last_blink_time > self.min_blink_interval):
-                self.blink_counter += 1
-                self.last_blink_time = current_time
-                print(f"Blink detected! Count: {self.blink_counter}")
-            self.frames_below_threshold = 0
-        
-        return self.blink_counter
+        self.last_blink_time = time.time()
+        self.ear_history.clear()
+        self.last_debug_time = 0.0

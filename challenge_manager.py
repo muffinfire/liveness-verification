@@ -65,25 +65,25 @@ class ChallengeManager:
         
         # Action check
         if not self.challenge_action_completed:
-            if "turn left" in c and head_pose=="left":
-                self.challenge_action_completed=True
-                self.action_completion_time=time.time()
+            if "turn left" in c and head_pose == "left":
+                self.challenge_action_completed = True
+                self.action_completion_time = time.time()
                 self.logger.debug("LEFT ACTION COMPLETED!")
-            elif "turn right" in c and head_pose=="right":
-                self.challenge_action_completed=True
-                self.action_completion_time=time.time()
+            elif "turn right" in c and head_pose == "right":
+                self.challenge_action_completed = True
+                self.action_completion_time = time.time()
                 self.logger.debug("RIGHT ACTION COMPLETED!")
-            elif "look up" in c and head_pose=="up":
-                self.challenge_action_completed=True
-                self.action_completion_time=time.time()
+            elif "look up" in c and head_pose == "up":
+                self.challenge_action_completed = True
+                self.action_completion_time = time.time()
                 self.logger.debug("UP ACTION COMPLETED!")
-            elif "look down" in c and head_pose=="down":
-                self.challenge_action_completed=True
-                self.action_completion_time=time.time()
+            elif "look down" in c and head_pose == "down":
+                self.challenge_action_completed = True
+                self.action_completion_time = time.time()
                 self.logger.debug("DOWN ACTION COMPLETED!")
-            elif "blink twice" in c and blink_counter>=2:
-                self.challenge_action_completed=True
-                self.action_completion_time=time.time()
+            elif "blink twice" in c and blink_counter >= 2:
+                self.challenge_action_completed = True
+                self.action_completion_time = time.time()
                 self.logger.debug(f"BLINK ACTION COMPLETED! Counter: {blink_counter}")
             elif "nod your head" in c:
                 # if you detect nod
@@ -118,7 +118,10 @@ class ChallengeManager:
         # Check concurrency
         if self.challenge_action_completed and self.challenge_word_completed:
             diff = abs((self.action_completion_time or 0) - (self.word_completion_time or 0))
-            self.logger.debug(f"Time diff between action & speech: {diff:.2f}s (max {self.config.ACTION_SPEECH_WINDOW:.2f}s)")
+            self.logger.debug(
+                f"Time diff between action & speech: {diff:.2f}s "
+                f"(max {self.config.ACTION_SPEECH_WINDOW:.2f}s)"
+            )
             if diff <= self.config.ACTION_SPEECH_WINDOW:
                 self.challenge_completed = True
                 self.verification_result = "PASS"
@@ -146,16 +149,25 @@ class ChallengeManager:
         elapsed = time.time() - self.challenge_start_time
         return max(0, self.challenge_timeout - elapsed)
     
-    def update(self, blink_counter: int, head_pose: str, last_speech: str) -> None:
+    def update(self, head_pose: str, blink_counter: int, last_speech: str) -> None:
         """
         Update the challenge manager with the latest detection results.
-        This method is called every frame to check challenge status.
         
         Args:
             blink_counter: Number of blinks detected
             head_pose: Current head pose ("left", "right", "up", "down", etc.)
             last_speech: Last recognized speech
         """
-        # This is a simple passthrough to verify_challenge
         if self.current_challenge:
             self.verify_challenge(head_pose, blink_counter, last_speech)
+
+    # [CHANGED] Added a reset method so we can call challenge_manager.reset()
+    def reset(self) -> None:
+        self.current_challenge = None
+        self.challenge_completed = False
+        self.challenge_start_time = None
+        self.challenge_action_completed = False
+        self.challenge_word_completed = False
+        self.verification_result = None
+        self.action_completion_time = None
+        self.word_completion_time = None

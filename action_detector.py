@@ -35,6 +35,9 @@ class ActionDetector:
         self.face_positions = deque(maxlen=config.FACE_POSITION_HISTORY_LENGTH)
         self.face_angles = deque(maxlen=config.FACE_POSITION_HISTORY_LENGTH)
         self.head_pose = "center"  # center, left, right, up, down
+
+        # [CHANGED] Rate-limit debug logs
+        self.last_debug_time = 0.0
     
     def set_action(self, action: str) -> None:
         """
@@ -51,17 +54,10 @@ class ActionDetector:
     def detect_head_pose(self, frame: np.ndarray, face_rect: Tuple[int, int, int, int]) -> str:
         """
         Detect head pose (left, right, up, down, center).
-        
-        Args:
-            frame: Input video frame
-            face_rect: Face rectangle (x, y, w, h)
-            
-        Returns:
-            Head pose as string: "left", "right", "up", "down", or "center"
         """
         if face_rect is None:
             return self.head_pose
-            
+        
         x, y, w, h = face_rect
         
         face_center_x = x + w/2
@@ -86,29 +82,23 @@ class ActionDetector:
             y_threshold_up = self.config.HEAD_POSE_THRESHOLD_Y_UP
             y_threshold_down = self.config.HEAD_POSE_THRESHOLD_Y_DOWN
             
-            self.logger.debug(f"Head position - X offset: {avg_x_offset:.2f}, Y offset: {avg_y_offset:.2f}")
-            
             old_pose = self.head_pose
+            
             if avg_x_offset < -x_threshold:
                 self.head_pose = "right"
-                if old_pose != "right":
-                    self.logger.debug("RIGHT detected!")
             elif avg_x_offset > x_threshold:
                 self.head_pose = "left"
-                if old_pose != "left":
-                    self.logger.debug("LEFT detected!")
             elif avg_y_offset < -y_threshold_up:
                 self.head_pose = "up"
-                if old_pose != "up":
-                    self.logger.debug("UP detected!")
             elif avg_y_offset > y_threshold_down:
                 self.head_pose = "down"
-                if old_pose != "down":
-                    self.logger.debug("DOWN detected!")
             else:
                 self.head_pose = "center"
-                if old_pose != "center":
-                    self.logger.debug("CENTER detected!")
+            
+            now = float(cv2.getTickCount()) / cv2.getTickFrequency()
+            if self.head_pose != old_pose and now - self.last_debug_time > 1.0:
+                self.logger.debug(f"{self.head_pose.upper()} detected!")
+                self.last_debug_time = now
             
             # Draw direction indicator for debugging
             center_x = int(frame.shape[1] / 2)
@@ -122,22 +112,14 @@ class ActionDetector:
     def detect_action(self, frame: np.ndarray, face_rect: Tuple[int, int, int, int]) -> bool:
         """
         Detect the specified action.
-        
-        Args:
-            frame: Input video frame
-            face_rect: Face rectangle (x, y, w, h)
-            
-        Returns:
-            True if action is detected, False otherwise
         """
         if self.current_action is None or face_rect is None:
             return False
-            
-        current_pose = self.detect_head_pose(frame, face_rect)
-        self.action_completed = current_pose.lower() == self.current_action.lower()
         
+        current_pose = self.detect_head_pose(frame, face_rect)
+        self.action_completed = (current_pose.lower() == self.current_action.lower())
         return self.action_completed
     
     def is_action_completed(self):
         """Check if the current action is completed."""
-        return self.action_completed 
+        return self.action_completed

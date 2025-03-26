@@ -1,5 +1,7 @@
 """Configuration settings for the liveness detection system."""
 
+import os
+
 class Config:
     # Debug mode
     DEBUG = True
@@ -26,7 +28,7 @@ class Config:
     
     # Blink detection parameters
     BLINK_THRESHOLD = 0.25  # EAR threshold for blink detection
-    MIN_BLINK_FRAMES = 1  # Minimum consecutive frames below threshold to count as blink
+    MIN_BLINK_FRAMES = 1    # Minimum consecutive frames below threshold to count as blink
     MIN_BLINK_INTERVAL = 0.1  # Minimum time between blinks (seconds)
     
     # Challenge parameters
@@ -62,3 +64,9 @@ class Config:
         "Look down and say ground", 
         "Blink twice and say hello"
     ]
+
+    # [CHANGED] SSL and host/port in config
+    CERTFILE = 'cert.pem'
+    KEYFILE = 'key.pem'
+    HOST = '0.0.0.0'
+    PORT = int(os.environ.get('PORT', 8080))

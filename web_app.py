@@ -16,72 +16,53 @@ from typing import Dict, Any
 from config import Config
 from liveness_detector import LivenessDetector
 
-# Initialize Flask app
 app = Flask(__name__, 
             static_folder='static',
             template_folder='templates')
 app.config['SECRET_KEY'] = 'liveness-detection-secret'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Create configuration
 config = Config()
 
-# Configure logging
 logging_level = logging.DEBUG if config.DEBUG else logging.INFO
 logging.basicConfig(
     level=logging_level,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format=config.LOGGING_FORMAT
 )
 logger = logging.getLogger(__name__)
 
-# Store active sessions
 active_sessions: Dict[str, Dict[str, Any]] = {}
-
-# Store verification codes
 verification_codes: Dict[str, Dict[str, Any]] = {}
-
-# Add this at the top of the file
 last_log_time = {}
 
 @app.route('/')
 def index():
-    """Render the main landing page."""
     return render_template('index.html')
 
 @app.route('/verify/<code>')
 def verify(code):
-    """Render the verification page."""
     logger.debug(f"Verify route called with code: {code}")
-    logger.debug(f"Current verification codes: {list(verification_codes.keys())}")
-    
     if code not in verification_codes:
         return render_template('error.html', 
                                message="Invalid verification code", 
                                redirect_url="/")
-    
     return render_template('verify.html', session_code=code)
 
 @app.route('/check_code/<code>')
 def check_code(code):
-    """Check if a verification code is valid."""
     logger.debug(f"Check code route called with code: {code}")
-    logger.debug(f"Current verification codes: {list(verification_codes.keys())}")
-    
     is_valid = code in verification_codes
     return jsonify({'valid': is_valid})
 
 @socketio.on('connect')
 def handle_connect():
-    """Handle client connection."""
     session_id = request.sid
     logger.info(f"Client connected: {session_id}")
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    """Handle client disconnection."""
     session_id = request.sid
     logger.info(f"Client disconnected: {session_id}")
-    
     if session_id in active_sessions:
         if active_sessions[session_id]['detector'] is not None:
             active_sessions[session_id]['detector'].speech_recognizer.stop()
@@ -89,9 +70,7 @@ def handle_disconnect():
 
 @socketio.on('frame')
 def handle_frame(data):
-    """Process a frame from the client (older approach)."""
     session_id = request.sid
-    
     if session_id not in active_sessions:
         logger.warning(f"Received frame from unknown session: {session_id}")
         return
@@ -136,7 +115,6 @@ def handle_frame(data):
 
 @socketio.on('reset')
 def handle_reset(data):
-    """Reset the verification process for a session."""
     session_id = request.sid
     code = data.get('code')
     
@@ -145,35 +123,24 @@ def handle_reset(data):
         return
     
     try:
-        # Reset the detector's challenge manager
         detector = active_sessions[session_id]['detector']
         detector.challenge_manager.reset()
+        detector.blink_detector.reset()
+        new_challenge = detector.challenge_manager.issue_new_challenge()
         
-        # Force issue a new challenge
-        detector.challenge_manager.issue_new_challenge()
-        
-        # Reset blink counter
-        detector.blink_detector.blink_counter = 0
-        
-        # Get the new challenge and set target word
-        challenge_text, _, _, _ = detector.challenge_manager.get_challenge_status()
-        if challenge_text:
-            target_word = challenge_text.split()[-1]
+        if new_challenge:
+            target_word = new_challenge.split()[-1]
             detector.speech_recognizer.set_target_word(target_word)
-            logger.info(f"New challenge issued after reset: {challenge_text}, Target word: {target_word}")
+            logger.info(f"New challenge issued after reset: {new_challenge}")
         
-        logger.info(f"Reset verification for session {session_id}")
-        
-        # Emit confirmation
         emit('reset_confirmed')
-        
     except Exception as e:
-        logger.error(f"Error resetting verification: {e}", exc_info=True)
+        logger.error(f"Error resetting verification: {e}")
         emit('error', {'message': str(e)})
 
 @socketio.on('get_debug_status')
 def handle_get_debug_status():
-    """Send the current debug status to the client."""
+    logger.debug(f"Debug status requested: debug={config.DEBUG}, showDebugFrame={config.SHOW_DEBUG_FRAME}")
     emit('debug_status', {
         'debug': config.DEBUG,
         'showDebugFrame': config.SHOW_DEBUG_FRAME
@@ -181,7 +148,6 @@ def handle_get_debug_status():
 
 @socketio.on('generate_code')
 def handle_generate_code():
-    """Generate a verification code."""
     session_id = request.sid
     logger.info(f"Generate code request from session {session_id}")
     
@@ -195,8 +161,6 @@ def handle_generate_code():
     logger.info(f"Emitting verification code {code} to session {session_id}")
     emit('verification_code', {'code': code})
     
-    logger.debug(f"Active verification codes: {verification_codes}")
-    
     def expire_code():
         time.sleep(600)
         if code in verification_codes and verification_codes[code]['status'] == 'pending':
@@ -208,7 +172,6 @@ def handle_generate_code():
     expiration_thread.start()
 
 def cleanup_inactive_sessions():
-    """Clean up inactive sessions periodically."""
     while True:
         current_time = time.time()
         inactive_sessions = []
@@ -227,13 +190,10 @@ def cleanup_inactive_sessions():
 
 @socketio.on('join_verification')
 def handle_join_verification(data):
-    """Handle client joining a verification session."""
     session_id = request.sid
     code = data.get('code')
     
     logger.info(f"Client {session_id} joining verification session with code: {code}")
-    logger.debug(f"Current verification codes: {list(verification_codes.keys())}")
-    
     if not code or code not in verification_codes:
         emit('session_error', {'message': 'Invalid verification code'})
         return
@@ -259,26 +219,21 @@ def handle_join_verification(data):
     requester_id = verification_codes[code]['requester_id']
     emit('verification_started', {'code': code}, room=requester_id)
     
-    logger.info(f"Client {session_id} joined verification session {code}")
-    
     challenge_text, _, _, _ = detector.challenge_manager.get_challenge_status()
     emit('challenge', {'text': challenge_text})
 
 @socketio.on('process_frame')
 def handle_process_frame(data):
-    """Process a frame from the client."""
-    global last_log_time
     session_id = request.sid
     code = data.get('code')
     
-    # Only log once per second per session
     current_time = time.time()
     if config.DEBUG and (session_id not in last_log_time or current_time - last_log_time.get(session_id, 0) >= 1.0):
         logger.debug(f"Processing frame for session {session_id}, code {code}")
         last_log_time[session_id] = current_time
     
     if session_id not in active_sessions:
-        logger.warning(f"Received frame from unknown session: {session_id}")  # Keep warnings
+        logger.warning(f"Received frame from unknown session: {session_id}")
         emit('session_error', {'message': 'Invalid session'})
         return
     
@@ -289,6 +244,7 @@ def handle_process_frame(data):
         image_bytes = base64.b64decode(image_data)
         nparr = np.frombuffer(image_bytes, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        logger.debug(f"Frame decoded: shape={frame.shape if frame is not None else 'None'}")
         
         detector = active_sessions[session_id]['detector']
         result = detector.process_frame(frame)
@@ -296,19 +252,24 @@ def handle_process_frame(data):
         display_frame = result['display_frame']
         debug_frame = result['debug_frame']
         
-        # Encode frames
-        _, buffer_disp = cv2.imencode('.jpg', display_frame)
-        disp_b64 = base64.b64encode(buffer_disp).decode('utf-8')
+        if display_frame is not None:
+            _, buffer_disp = cv2.imencode('.jpg', display_frame)
+            disp_b64 = base64.b64encode(buffer_disp).decode('utf-8')
+            logger.debug("Display frame encoded")
+        else:
+            disp_b64 = None
+            logger.debug("Display frame is None")
         
-        # Always encode debug frame if it exists
         debug_b64 = None
         if debug_frame is not None:
             _, buffer_dbg = cv2.imencode('.jpg', debug_frame)
             debug_b64 = base64.b64encode(buffer_dbg).decode('utf-8')
+            logger.debug("Debug frame encoded")
+        else:
+            logger.debug("Debug frame is None")
         
-        # Prepare data to emit
         emit_data = {
-            'image': f"data:image/jpeg;base64,{disp_b64}",
+            'image': f"data:image/jpeg;base64,{disp_b64}" if disp_b64 else None,
             'debug_image': f"data:image/jpeg;base64,{debug_b64}" if debug_b64 else None,
             'challenge': result['challenge_text'],
             'action_completed': result['action_completed'],
@@ -317,17 +278,11 @@ def handle_process_frame(data):
             'verification_result': result['verification_result'],
             'exit_flag': result['exit_flag']
         }
-        
-        if config.DEBUG:  # Only log if debug is enabled
-            logger.debug(f"Emitting processed frame: challenge={result['challenge_text']}, " 
-                        f"action_completed={result['action_completed']}, "
-                        f"has_debug_frame={debug_b64 is not None}")
-        
+        logger.debug(f"Emitting processed_frame: has_image={bool(disp_b64)}, has_debug={bool(debug_b64)}")
         emit('processed_frame', emit_data)
         
         if result['exit_flag']:
             active_sessions[session_id]['attempts'] = active_sessions[session_id].get('attempts', 0) + 1
-            
             if result['verification_result'] == 'PASS' or active_sessions[session_id]['attempts'] >= 3:
                 if code and code in verification_codes:
                     verification_codes[code]['status'] = 'completed'
@@ -337,14 +292,12 @@ def handle_process_frame(data):
                         'result': result['verification_result'],
                         'code': code
                     }, room=requester_id)
-        
     except Exception as e:
-        logger.error(f"Error processing frame: {e}")  # Keep error logging always on
+        logger.error(f"Error processing frame: {e}")
         emit('error', {'message': str(e)})
 
 @socketio.on('verification_complete')
 def handle_verification_complete(data):
-    """Handle verification completion notification."""
     code = data.get('code')
     result = data.get('result')
     
@@ -365,13 +318,11 @@ if __name__ == '__main__':
     cleanup_thread.daemon = True
     cleanup_thread.start()
     
-    port = int(os.environ.get('PORT', 8080))
-    
     socketio.run(
         app,
-        host='0.0.0.0',
-        port=port,
+        host=config.HOST,
+        port=config.PORT,
         debug=config.DEBUG,
-        certfile='cert.pem',
-        keyfile='key.pem'
+        certfile=config.CERTFILE,
+        keyfile=config.KEYFILE
     )

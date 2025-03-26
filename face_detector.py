@@ -28,9 +28,13 @@ class FaceDetector:
         self.face_angles = deque(maxlen=30)
         self.head_pose = "center"
         self.movement_detected = False
+        
+        # [CHANGED] Rate-limit debug logs
+        self.last_debug_time = 0.0
     
     def detect_face(self, frame: np.ndarray) -> Tuple[Optional[np.ndarray], Optional[Tuple[int,int,int,int]]]:
-        self.logger.debug(f"Detecting face in frame with shape: {frame.shape if frame is not None else 'None'}")
+        now = cv2.getTickCount() / cv2.getTickFrequency()
+        
         if frame is None or frame.size == 0:
             self.logger.error("Received empty or None frame")
             return None, None
@@ -51,22 +55,23 @@ class FaceDetector:
             y = int(last_y - est_size // 2)
             w = est_size
             h = est_size
-            self.logger.debug("Using estimated face position fallback")
             
-            x = max(0, x)
-            y = max(0, y)
-            w = min(w, frame.shape[1] - x)
-            h = min(h, frame.shape[0] - y)
+            if 0 <= x < frame.shape[1] and 0 <= y < frame.shape[0]:
+                w = min(w, frame.shape[1] - x)
+                h = min(h, frame.shape[0] - y)
+                if w > 0 and h > 0:
+                    face_roi = frame[y:y+h, x:x+w]
+                    if now - self.last_debug_time > 1.0:
+                        self.logger.debug("Using estimated face position fallback")
+                        self.last_debug_time = now
+                    return face_roi, (x, y, w, h)
             
-            if w > 0 and h > 0:
-                face_roi = frame[y:y+h, x:x+w]
-                return face_roi, (x, y, w, h)
-            else:
-                self.logger.debug("Fallback face ROI invalid")
-                return None, None
+            return None, None
         
         if len(faces) == 0:
-            self.logger.debug("No face detected in frame")
+            if now - self.last_debug_time > 1.0:
+                self.logger.debug("No face detected in frame")
+                self.last_debug_time = now
             return None, None
         
         face_rect = max(faces, key=lambda rect: rect[2] * rect[3])
@@ -76,11 +81,17 @@ class FaceDetector:
         w = min(w, frame.shape[1] - x)
         h = min(h, frame.shape[0] - y)
         if w <= 0 or h <= 0:
-            self.logger.debug("Detected face ROI invalid")
+            if now - self.last_debug_time > 1.0:
+                self.logger.debug("Detected face ROI invalid")
+                self.last_debug_time = now
             return None, None
         
         face_roi = frame[y:y+h, x:x+w]
-        self.logger.debug(f"Face detected at: ({x}, {y}, {w}, {h})")
+        
+        if now - self.last_debug_time > 1.0:
+            self.logger.debug(f"Face detected at: ({x}, {y}, {w}, {h})")
+            self.last_debug_time = now
+        
         return face_roi, (x, y, w, h)
     
     def detect_movement(self, face_rect: Tuple[int,int,int,int]) -> bool:
@@ -145,8 +156,10 @@ class FaceDetector:
             else:
                 self.head_pose="center"
             
-            if old_pose != self.head_pose:
+            now = time.time()
+            if old_pose != self.head_pose and now - self.last_debug_time > 1.0:
                 self.logger.debug(f"{self.head_pose.upper()} detected!")
+                self.last_debug_time = now
             
             # draw line for debug
             center_x = int(frame.shape[1]/2)
