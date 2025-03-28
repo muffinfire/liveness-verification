@@ -17,7 +17,7 @@ from typing import Dict, Any
 from config import Config
 from liveness_detector import LivenessDetector
 
-app = Flask(__name__, 
+app = Flask(__name__,
             static_folder='static',
             template_folder='templates')
 app.config['SECRET_KEY'] = 'liveness-detection-secret'
@@ -43,17 +43,34 @@ def index():
 @app.route('/verify/<code>')
 def verify(code):
     logger.debug(f"Verify route called with code: {code}")
-    if code not in verification_codes:
-        return render_template('error.html', 
-                               message="Invalid verification code", 
+    if code not in verification_codes or verification_codes[code]['status'] != 'pending':
+        return render_template('error.html',
+                               message="Invalid or expired verification code",
                                redirect_url="/")
     return render_template('verify.html', session_code=code)
 
 @app.route('/check_code/<code>')
 def check_code(code):
     logger.debug(f"Check code route called with code: {code}")
-    is_valid = code in verification_codes
+    is_valid = code in verification_codes and verification_codes[code]['status'] == 'pending'
     return jsonify({'valid': is_valid})
+
+def cleanup_session(session_id: str, code: str = None):
+    """Clean up a session and its associated QR code."""
+    if session_id in active_sessions:
+        session_data = active_sessions[session_id]
+        if session_data['detector'] is not None:
+            session_data['detector'].speech_recognizer.stop()
+        code = code or session_data.get('code')
+        if code and code in verification_codes:
+            qr_path = f"static/qr_codes/{code}.png"
+            if os.path.exists(qr_path):
+                os.remove(qr_path)
+                logger.info(f"Deleted QR code for session {session_id}: {code}")
+            verification_codes[code]['status'] = 'completed'
+            del verification_codes[code]
+        del active_sessions[session_id]
+        logger.info(f"Cleaned up session {session_id} with code {code}")
 
 @socketio.on('connect')
 def handle_connect():
@@ -64,10 +81,7 @@ def handle_connect():
 def handle_disconnect():
     session_id = request.sid
     logger.info(f"Client disconnected: {session_id}")
-    if session_id in active_sessions:
-        if active_sessions[session_id]['detector'] is not None:
-            active_sessions[session_id]['detector'].speech_recognizer.stop()
-        del active_sessions[session_id]
+    cleanup_session(session_id)
 
 @socketio.on('frame')
 def handle_frame(data):
@@ -78,6 +92,7 @@ def handle_frame(data):
     
     if active_sessions[session_id].get('attempts', 0) >= 3:
         emit('max_attempts_reached')
+        cleanup_session(session_id)
         return
     
     active_sessions[session_id]['last_activity'] = time.time()
@@ -107,9 +122,11 @@ def handle_frame(data):
             'exit_flag': exit_flag
         })
         
-        if exit_flag:
+        if exit_flag and verification_result in ['PASS', 'FAIL']:
             active_sessions[session_id]['attempts'] = active_sessions[session_id].get('attempts', 0) + 1
-            
+            if verification_result == 'PASS' or active_sessions[session_id]['attempts'] >= 3:
+                cleanup_session(session_id)
+    
     except Exception as e:
         logger.error(f"Error processing frame: {e}")
         emit('error', {'message': str(e)})
@@ -126,7 +143,8 @@ def handle_reset(data):
     try:
         detector = active_sessions[session_id]['detector']
         detector.reset()
-        logger.info(f"Reset detector for session {session_id}, new challenge issued")
+        active_sessions[session_id]['attempts'] = active_sessions[session_id].get('attempts', 0) + 1
+        logger.info(f"Reset detector for session {session_id}, new challenge issued, attempt {active_sessions[session_id]['attempts']}")
         emit('reset_confirmed')
     except Exception as e:
         logger.error(f"Error resetting verification: {e}")
@@ -151,8 +169,8 @@ def handle_generate_code():
     qr.add_data(verification_url)
     qr.make(fit=True)
     qr_img = qr.make_image(fill='black', back_color='white')
-    qr_img.save(f"static/qr_codes/{code}.png")
-    qr_path = f"/static/qr_codes/{code}.png"
+    qr_path = f"static/qr_codes/{code}.png"
+    qr_img.save(qr_path)
     
     verification_codes[code] = {
         'requester_id': session_id,
@@ -161,14 +179,16 @@ def handle_generate_code():
     }
     
     logger.info(f"Emitting verification code {code} with QR code to session {session_id}")
-    emit('verification_code', {'code': code, 'qr_code': qr_path})
+    emit('verification_code', {'code': code, 'qr_code': f"/static/qr_codes/{code}.png"})
     
     def expire_code():
-        time.sleep(600)
+        time.sleep(600)  # 10 minutes
         if code in verification_codes and verification_codes[code]['status'] == 'pending':
+            qr_path = f"static/qr_codes/{code}.png"
+            if os.path.exists(qr_path):
+                os.remove(qr_path)
+                logger.info(f"Deleted QR code for expired code: {code}")
             del verification_codes[code]
-            if os.path.exists(f"static/qr_codes/{code}.png"):
-                os.remove(f"static/qr_codes/{code}.png")
             logger.info(f"Expired verification code {code}")
     
     expiration_thread = threading.Thread(target=expire_code)
@@ -181,16 +201,13 @@ def cleanup_inactive_sessions():
         inactive_sessions = []
         
         for session_id, session_data in active_sessions.items():
-            if current_time - session_data['last_activity'] > 300:
+            if current_time - session_data['last_activity'] > config.SESSION_TIMEOUT:
                 inactive_sessions.append(session_id)
         
         for session_id in inactive_sessions:
-            logger.info(f"Cleaning up inactive session: {session_id}")
-            if active_sessions[session_id]['detector'] is not None:
-                active_sessions[session_id]['detector'].speech_recognizer.stop()
-            del active_sessions[session_id]
+            cleanup_session(session_id)
         
-        time.sleep(60)
+        time.sleep(10)  # Check every 10 seconds
 
 @socketio.on('join_verification')
 def handle_join_verification(data):
@@ -198,12 +215,8 @@ def handle_join_verification(data):
     code = data.get('code')
     
     logger.info(f"Client {session_id} joining verification session with code: {code}")
-    if not code or code not in verification_codes:
-        emit('session_error', {'message': 'Invalid verification code'})
-        return
-    
-    if verification_codes[code]['status'] == 'in-progress':
-        emit('session_error', {'message': 'This verification session is already in progress'})
+    if not code or code not in verification_codes or verification_codes[code]['status'] != 'pending':
+        emit('session_error', {'message': 'Invalid or expired verification code'})
         return
     
     verification_codes[code]['status'] = 'in-progress'
@@ -236,9 +249,14 @@ def handle_process_frame(data):
         logger.debug(f"Processing frame for session {session_id}, code {code}")
         last_log_time[session_id] = current_time
     
-    if session_id not in active_sessions:
-        logger.warning(f"Received frame from unknown session: {session_id}")
-        emit('session_error', {'message': 'Invalid session'})
+    if session_id not in active_sessions or active_sessions[session_id]['code'] != code:
+        logger.warning(f"Received frame from unknown or invalid session: {session_id}, code: {code}")
+        emit('session_error', {'message': 'Invalid session or code'})
+        return
+    
+    if active_sessions[session_id].get('attempts', 0) >= 3:
+        emit('max_attempts_reached')
+        cleanup_session(session_id, code)
         return
     
     active_sessions[session_id]['last_activity'] = time.time()
@@ -288,19 +306,34 @@ def handle_process_frame(data):
         
         if result['exit_flag']:
             active_sessions[session_id]['attempts'] = active_sessions[session_id].get('attempts', 0) + 1
-            if result['verification_result'] == 'PASS' or active_sessions[session_id]['attempts'] >= 3 or result['duress_detected']:
-                if code and code in verification_codes:
-                    verification_codes[code]['status'] = 'completed'
-                    verification_codes[code]['result'] = result['verification_result']
-                    requester_id = verification_codes[code]['requester_id']
+            logger.debug(f"Attempt {active_sessions[session_id]['attempts']} for session {session_id}")
+            requester_id = verification_codes[code]['requester_id']
+            if result['duress_detected']:
+                emit('verification_result', {
+                    'result': 'FAIL',
+                    'code': code,
+                    'duress_detected': True
+                }, room=requester_id)
+                cleanup_session(session_id, code)
+            elif result['verification_result'] == 'PASS':
+                emit('verification_result', {
+                    'result': 'PASS',
+                    'code': code,
+                    'duress_detected': False
+                }, room=requester_id)
+                cleanup_session(session_id, code)
+            elif result['verification_result'] == 'FAIL' or result['time_remaining'] <= 0:
+                if active_sessions[session_id]['attempts'] >= 3:
                     emit('verification_result', {
-                        'result': result['verification_result'],
+                        'result': 'FAIL',
                         'code': code,
-                        'duress_detected': result['duress_detected']
+                        'duress_detected': False
                     }, room=requester_id)
-            elif result['verification_result'] == 'FAIL':
-                detector.reset()
-                logger.info(f"Reset detector after failure for session {session_id}")
+                    cleanup_session(session_id, code)
+                else:
+                    detector.reset()
+                    logger.info(f"Reset detector after failure/timeout for session {session_id}, attempt {active_sessions[session_id]['attempts']}")
+                    emit('challenge', {'text': detector.challenge_manager.get_challenge_status()[0]})
     except Exception as e:
         logger.error(f"Error processing frame: {e}")
         emit('error', {'message': str(e)})
@@ -311,15 +344,14 @@ def handle_verification_complete(data):
     result = data.get('result')
     
     if code and code in verification_codes:
-        verification_codes[code]['status'] = 'completed'
-        verification_codes[code]['result'] = result
-        
         requester_id = verification_codes[code]['requester_id']
         emit('verification_result', {
             'result': result,
             'code': code
         }, room=requester_id)
-        
+        for session_id, session_data in list(active_sessions.items()):
+            if session_data.get('code') == code:
+                cleanup_session(session_id, code)
         logger.info(f"Verification {code} completed with result: {result}")
 
 if __name__ == '__main__':

@@ -8,6 +8,9 @@ class Config:
     
     # Show debug frame with eye tracking polygons, EAR values, etc.
     SHOW_DEBUG_FRAME = False
+
+    # Session timeout in seconds
+    SESSION_TIMEOUT = 120
     
     # Camera settings
     CAMERA_WIDTH = 640

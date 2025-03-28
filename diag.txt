@@ -387,10 +387,13 @@ import os
 
 class Config:
     # Debug mode
-    DEBUG = True
+    DEBUG = False
     
     # Show debug frame with eye tracking polygons, EAR values, etc.
-    SHOW_DEBUG_FRAME = True
+    SHOW_DEBUG_FRAME = False
+
+    # Session timeout in seconds
+    SESSION_TIMEOUT = 120
     
     # Camera settings
     CAMERA_WIDTH = 640
@@ -429,7 +432,8 @@ class Config:
         "sky /1e-3/",
         "ground /1e-3/",
         "hello /1e-3/",
-        "noise /1e-1/"
+        "verify /1e-3/",
+        "noise /1e-1/",
     ]
     
     # Liveness scoring
@@ -453,6 +457,7 @@ class Config:
     KEYFILE = 'key.pem'
     HOST = '0.0.0.0'
     PORT = int(os.environ.get('PORT', 8080))
+    BASE_URL = 'https://192.168.8.126:8080'  # Configurable base URL for QR code
 
 
 
@@ -682,8 +687,6 @@ class LivenessDetector:
     def __init__(self, config: Config):
         """Initialize the liveness detector with configuration."""
         self.config = config
-        
-        # Configure logging
         logging_level = logging.DEBUG if config.DEBUG else logging.INFO
         logging.basicConfig(
             level=logging_level,
@@ -691,70 +694,48 @@ class LivenessDetector:
         )
         self.logger = logging.getLogger(__name__)
         
-        # If not in debug mode, set logging level to WARNING to suppress INFO logs
         if not config.DEBUG:
             for handler in logging.root.handlers:
                 handler.setLevel(logging.WARNING)
         
-        # Initialize components
         self.face_detector = FaceDetector(config)
         self.blink_detector = BlinkDetector(config)
         self.action_detector = ActionDetector(config)
         self.speech_recognizer = SpeechRecognizer(config)
         
-        # Pass speech_recognizer and blink_detector to challenge_manager
         self.challenge_manager = ChallengeManager(
-            config, 
+            config,
             speech_recognizer=self.speech_recognizer,
             blink_detector=self.blink_detector
         )
         
-        # Status variables
         self.consecutive_live_frames = 0
         self.consecutive_fake_frames = 0
-        self.status = "Analyzing..."
+        self.status = "Waiting for verification..."
         self.liveness_score = 0.0
+        self.duress_detected = False
         
-        # Start with a challenge immediately
-        self.challenge_manager.issue_new_challenge()
-        self.speech_recognizer.start_listening()
-        
-        # Set target word from challenge
-        challenge_text, _, _, _ = self.challenge_manager.get_challenge_status()
-        if challenge_text:
-            target_word = challenge_text.split()[-1]
-            self.speech_recognizer.set_target_word(target_word)
+        self.start_challenge()
+        self.logger.debug("LivenessDetector initialized")
     
     def detect_liveness(self, frame: np.ndarray) -> Tuple[np.ndarray, bool]:
-        """
-        Process a frame for liveness detection (the old function).
-        Returns: (processed_frame, exit_flag).
-        """
+        """Process a frame for liveness detection (older method)."""
         display_frame = frame.copy()
         
         face_roi, face_rect = self.face_detector.detect_face(frame)
         
         if face_roi is None:
-            cv2.putText(display_frame, "No face detected", (50, 50), 
+            cv2.putText(display_frame, "No face detected", (50, 50),
                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
             return display_frame, False
         
-        # Movement detection
         self.face_detector.detect_movement(face_rect)
-        
-        # Head pose from action_detector
         head_pose = self.action_detector.detect_head_pose(display_frame, face_rect)
-        
-        # Blink detection
         self.blink_detector.detect_blinks(frame, face_rect, face_roi)
-        
-        # Speech
         last_speech = self.speech_recognizer.get_last_speech()
         
-        # [CHANGED] pass head_pose instead of action_detected
-        self.challenge_manager.update(self.blink_detector.blink_counter, head_pose, last_speech)
+        self.challenge_manager.update(head_pose, self.blink_detector.blink_counter, last_speech)
         
-        # Check status
         challenge_text, action_completed, word_completed, verification_result = \
             self.challenge_manager.get_challenge_status()
         
@@ -763,63 +744,63 @@ class LivenessDetector:
                 head_pose, self.blink_detector.blink_counter, last_speech
             )
             
-            cv2.putText(display_frame, f"Challenge: {challenge_text}", (10, 30), 
+            cv2.putText(display_frame, f"Challenge: {challenge_text}", (10, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            
             time_remaining = self.challenge_manager.get_challenge_time_remaining()
-            cv2.putText(display_frame, f"Time: {time_remaining:.1f}s", (10, 60), 
+            cv2.putText(display_frame, f"Time: {time_remaining:.1f}s", (10, 60),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            
             action_status = "✓" if action_completed else "✗"
             word_status = "✓" if word_completed else "✗"
-            cv2.putText(display_frame, f"Action: {action_status}", (10, 90), 
+            cv2.putText(display_frame, f"Action: {action_status}", (10, 90),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            cv2.putText(display_frame, f"Word: {word_status}", (10, 120), 
+            cv2.putText(display_frame, f"Word: {word_status}", (10, 120),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             
             if verification_result == "PASS":
-                cv2.putText(display_frame, "VERIFICATION PASSED", (50, 200), 
+                cv2.putText(display_frame, "VERIFICATION PASSED", (50, 200),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                 return display_frame, True
             elif verification_result == "FAIL":
-                cv2.putText(display_frame, "VERIFICATION FAILED", (50, 200), 
+                cv2.putText(display_frame, "VERIFICATION FAILED", (50, 200),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                 return display_frame, True
         else:
-            # If none active
-            self.challenge_manager.issue_new_challenge()
+            self.start_challenge()
         
         self.face_detector.draw_face_info(display_frame, face_rect, self.status, self.liveness_score)
-        
-        cv2.putText(display_frame, f"Speech: {last_speech}", (10, display_frame.shape[0]-20), 
+        cv2.putText(display_frame, f"Speech: {last_speech}", (10, display_frame.shape[0]-20),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
         return display_frame, False
 
     def reset(self) -> None:
-        """Reset all components."""
+        """Reset all components to initial state."""
         self.blink_detector.reset()
         self.speech_recognizer.reset()
-        self.challenge_manager.reset()  # [CHANGED] calls new reset method
+        self.challenge_manager.reset()
         self.consecutive_live_frames = 0
         self.consecutive_fake_frames = 0
-        self.status = "Analyzing..."
+        self.status = "Waiting for verification..."
         self.liveness_score = 0.0
-    
+        self.duress_detected = False
+        self.start_challenge()
+        self.logger.debug("LivenessDetector reset")
+
     def start_challenge(self):
+        """Start a new challenge."""
         self.challenge_manager.issue_new_challenge()
+        self.speech_recognizer.start_listening()
         challenge_text, _, _, _ = self.challenge_manager.get_challenge_status()
         if challenge_text:
             target_word = challenge_text.split()[-1]
             self.speech_recognizer.set_target_word(target_word)
+        self.logger.debug(f"New challenge started: {challenge_text}")
     
     def process_frame(self, frame):
-        """
-        Process a frame for liveness detection in the new approach.
-        Returns: Dictionary with processed frame data.
-        """
+        """Process a frame for liveness detection (newer approach)."""
+        self.logger.debug("Processing frame in LivenessDetector")
         if frame is None or frame.size == 0:
-            print("Error: Frame is None or empty in process_frame")
+            self.logger.error("Frame is None or empty in process_frame")
             return {
                 'display_frame': None,
                 'debug_frame': None,
@@ -828,131 +809,154 @@ class LivenessDetector:
                 'challenge_text': None,
                 'action_completed': False,
                 'word_completed': False,
-                'time_remaining': 0
+                'time_remaining': 0,
+                'duress_detected': False
             }
         
         display_frame = frame.copy()
-        debug_frame = frame.copy()
+        debug_frame = frame.copy() if self.config.SHOW_DEBUG_FRAME else None
         
         face_roi, face_rect = self.face_detector.detect_face(display_frame)
         
+        head_pose = None
         if face_roi is None:
+            self.logger.debug("No face detected")
             cv2.putText(display_frame, "No face detected", (30, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-            cv2.putText(debug_frame, "No face detected", (30, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+            if debug_frame is not None:
+                cv2.putText(debug_frame, "No face detected", (30, 30),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+        else:
+            self.logger.debug(f"Face detected at {face_rect}")
+            self.blink_detector.detect_blinks(frame, face_rect, face_roi)
+            self.logger.debug(f"Blink count: {self.blink_detector.blink_counter}")
+            
+            if self.config.SHOW_DEBUG_FRAME:
+                self.logger.debug("Generating debug frame with landmarks")
+                gray_roi = cv2.cvtColor(face_roi, cv2.COLOR_BGR2GRAY)
+                x, y, w, h = face_rect
+                dlib_rect = dlib.rectangle(0, 0, w, h)
+                landmarks = self.blink_detector.dlib_predictor(gray_roi, dlib_rect)
+                
+                left_eye = [(landmarks.part(i).x + x, landmarks.part(i).y + y) for i in range(36, 42)]
+                right_eye = [(landmarks.part(i).x + x, landmarks.part(i).y + y) for i in range(42, 48)]
+                
+                cv2.polylines(debug_frame, [np.array(left_eye)], True, (0, 255, 0), 1)
+                cv2.polylines(debug_frame, [np.array(right_eye)], True, (0, 255, 0), 1)
+                
+                left_ear = self.blink_detector.calculate_ear(np.array(left_eye) - np.array([x, y]))
+                right_ear = self.blink_detector.calculate_ear(np.array(right_eye) - np.array([x, y]))
+                
+                left_center = np.mean(np.array(left_eye), axis=0).astype(int)
+                right_center = np.mean(np.array(right_eye), axis=0).astype(int)
+                cv2.putText(debug_frame, f"L: {left_ear:.2f}", 
+                            (left_center[0] - 20, left_center[1] - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+                cv2.putText(debug_frame, f"R: {right_ear:.2f}", 
+                            (right_center[0] - 20, right_center[1] - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+                self.logger.debug(f"Debug frame generated: EAR L={left_ear:.2f}, R={right_ear:.2f}")
         
-            return {
-                'display_frame': display_frame,
-                'debug_frame': debug_frame,
-                'verification_result': 'PENDING',
-                'exit_flag': False,
-                'challenge_text': None,
-                'action_completed': False,
-                'word_completed': False,
-                'time_remaining': 0
-            }
-        
-        # Blink detection
-        blink_count = self.blink_detector.detect_blinks(frame, face_rect, face_roi)
-        
-        # [CHANGED] Fix the dlib predictor usage with local coords
-        if self.config.SHOW_DEBUG_FRAME:
-            gray_roi = cv2.cvtColor(face_roi, cv2.COLOR_BGR2GRAY)
-            x, y, w, h = face_rect
-            
-            # Use local rectangle
-            dlib_rect = dlib.rectangle(0, 0, w, h)
-            landmarks = self.blink_detector.dlib_predictor(gray_roi, dlib_rect)
-            
-            # Offset landmark coords for the full debug frame
-            left_eye = [(landmarks.part(i).x + x, landmarks.part(i).y + y) for i in range(36, 42)]
-            right_eye = [(landmarks.part(i).x + x, landmarks.part(i).y + y) for i in range(42, 48)]
-            
-            cv2.polylines(debug_frame, [np.array(left_eye)], True, (0, 255, 0), 1)
-            cv2.polylines(debug_frame, [np.array(right_eye)], True, (0, 255, 0), 1)
-            
-            # Calculate and display EAR values
-            left_ear = self.blink_detector.calculate_ear(np.array(left_eye) - np.array([x, y]))
-            right_ear = self.blink_detector.calculate_ear(np.array(right_eye) - np.array([x, y]))
-            
-            left_center = np.mean(np.array(left_eye), axis=0).astype(int)
-            right_center = np.mean(np.array(right_eye), axis=0).astype(int)
-            
-            cv2.putText(debug_frame, f"L: {left_ear:.2f}", 
-                        (left_center[0] - 20, left_center[1] - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-            cv2.putText(debug_frame, f"R: {right_ear:.2f}", 
-                        (right_center[0] - 20, right_center[1] - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-        
-        # Action detection
-        action_detected = self.action_detector.detect_action(face_roi, face_rect)
-        
-        # Speech
+        head_pose = self.action_detector.detect_head_pose(display_frame, face_rect)
+        self.logger.debug(f"Head pose: {head_pose}")
         last_speech = self.speech_recognizer.get_last_speech()
         
-        # [CHANGED] pass actual head pose to challenge_manager
-        head_pose = self.action_detector.detect_head_pose(debug_frame, face_rect)
-        self.challenge_manager.update(head_pose, blink_count, last_speech)
+        if last_speech.lower() == "verify":
+            self.duress_detected = True
+            self.logger.info("Duress detected: 'verify' spoken")
         
-        # Get challenge status
+        self.challenge_manager.update(head_pose, self.blink_detector.blink_counter, last_speech)
+        
         challenge_text, action_completed, word_completed, verification_result = \
             self.challenge_manager.get_challenge_status()
         time_left = self.challenge_manager.get_challenge_time_remaining()
+        self.logger.debug(f"Challenge status: text={challenge_text}, action={action_completed}, "
+                         f"word={word_completed}, result={verification_result}, time={time_left:.1f}s")
+        
+        if word_completed and challenge_text:
+            target_action = challenge_text.split()[1].lower()
+            action_completed = (head_pose == target_action)
+            self.logger.debug(f"Word spoken, verifying action: expected={target_action}, detected={head_pose}")
+            self.challenge_manager.action_completed = action_completed
         
         final_result = 'PENDING'
         exit_flag = False
         
         if verification_result != "PENDING":
-            cv2.putText(debug_frame, f"Action: {action_detected}", (10, 120),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            cv2.putText(debug_frame, f"Speech: {last_speech}", (10, 150),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            cv2.putText(debug_frame, f"Blinks: {self.blink_detector.blink_counter}", (10, 180),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            last_speech = self.speech_recognizer.get_last_speech()
+            if debug_frame is not None:
+                cv2.putText(debug_frame, f"Speech: {last_speech}", (10, 150),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                cv2.putText(debug_frame, f"Blinks: {self.blink_detector.blink_counter}", (10, 180),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             
-            if verification_result == "PASS":
-                cv2.putText(debug_frame, "VERIFICATION PASSED", (50, 220),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 1)
+            if self.duress_detected:
+                self.status = "UNDER DURESS DETECTED"
+                cv2.putText(debug_frame if debug_frame is not None else display_frame,
+                            "DURESS DETECTED", (20, display_frame.shape[0]-20),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (239, 234, 79), 2)
+                final_result = 'FAIL'
+                exit_flag = True
+            elif verification_result == "PASS":
+                self.status = "VERIFICATION PASSED"
+                cv2.putText(debug_frame if debug_frame is not None else display_frame,
+                            "VERIFICATION PASSED", (20, display_frame.shape[0]-20),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                 final_result = 'PASS'
                 exit_flag = True
             elif verification_result == "FAIL":
-                cv2.putText(debug_frame, "VERIFICATION FAILED", (50, 220),
+                self.status = "VERIFICATION FAILED"
+                cv2.putText(debug_frame if debug_frame is not None else display_frame,
+                            "VERIFICATION FAILED", (20, display_frame.shape[0]-20),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
                 final_result = 'FAIL'
                 exit_flag = True
+            self.logger.debug(f"Verification result: {final_result}")
         else:
-            # If no challenge is active, issue new one
             if not challenge_text:
-                self.challenge_manager.issue_new_challenge()
+                self.start_challenge()
                 challenge_text, action_completed, word_completed, verification_result = \
                     self.challenge_manager.get_challenge_status()
                 time_left = self.challenge_manager.get_challenge_time_remaining()
+                self.logger.debug("Issued new challenge due to none active")
         
+        # Draw face info on both frames
         self.face_detector.draw_face_info(display_frame, face_rect, self.status, self.liveness_score)
-        cv2.putText(display_frame, f"Speech: {last_speech}",
+        cv2.putText(display_frame, f"Speech: {self.speech_recognizer.get_last_speech()}",
                     (10, display_frame.shape[0] - 20),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        if self.config.SHOW_DEBUG_FRAME and debug_frame is not None:
+            self.face_detector.draw_face_info(debug_frame, face_rect, self.status, self.liveness_score)
         
-        cv2.putText(debug_frame, f"Challenge: {challenge_text}", (10, 30),
+        cv2.putText(display_frame, f"Head Pose: {head_pose if head_pose else 'None'}", (10, 210),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        cv2.putText(debug_frame, f"Action completed: {action_completed}", (10, 60),
+        cv2.putText(display_frame, f"Challenge: {challenge_text}", (10, 30),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        cv2.putText(debug_frame, f"Word completed: {word_completed}", (10, 90),
+        cv2.putText(display_frame, f"Action completed: {action_completed}", (10, 60),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        cv2.putText(debug_frame, f"Time left: {time_left:.1f}s", (10, 120),
+        cv2.putText(display_frame, f"Word completed: {word_completed}", (10, 90),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        cv2.putText(debug_frame, f"Blinks: {self.blink_detector.blink_counter}", (10, 150),
+        cv2.putText(display_frame, f"Time left: {time_left:.1f}s", (10, 120),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
-        # Update liveness score
-        if action_completed:
-            self.liveness_score += 0.5
-        if word_completed:
-            self.liveness_score += 0.5
-        self.liveness_score = min(1.0, self.liveness_score)
+        if debug_frame is not None:
+            cv2.putText(debug_frame, f"Head Pose: {head_pose if head_pose else 'None'}", (10, 210),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            cv2.putText(debug_frame, f"Challenge: {challenge_text}", (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            cv2.putText(debug_frame, f"Action completed: {action_completed}", (10, 60),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            cv2.putText(debug_frame, f"Word completed: {word_completed}", (10, 90),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            cv2.putText(debug_frame, f"Time left: {time_left:.1f}s", (10, 120),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
+        if action_completed and word_completed:
+            self.liveness_score = 1.0
+        else:
+            self.liveness_score = 0.0
+        
+        self.logger.debug("Frame processing completed")
         return {
             'display_frame': display_frame,
             'debug_frame': debug_frame,
@@ -961,7 +965,8 @@ class LivenessDetector:
             'challenge_text': challenge_text,
             'action_completed': action_completed,
             'word_completed': word_completed,
-            'time_remaining': time_left
+            'time_remaining': time_left,
+            'duress_detected': self.duress_detected
         }
 
 
@@ -1125,7 +1130,7 @@ class SpeechRecognizer:
                     continue
 
                 # Otherwise, process recognized keywords.
-                possible_keywords = ["blue", "red", "sky", "ground", "hello", "noise"]
+                possible_keywords = ["blue", "red", "sky", "ground", "hello", "verify", "noise"]
                 first_word = None
                 for k in possible_keywords:
                     if k in text:
@@ -1196,6 +1201,7 @@ import numpy as np
 import logging
 import random
 import string
+import qrcode
 from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import threading
@@ -1205,7 +1211,7 @@ from typing import Dict, Any
 from config import Config
 from liveness_detector import LivenessDetector
 
-app = Flask(__name__, 
+app = Flask(__name__,
             static_folder='static',
             template_folder='templates')
 app.config['SECRET_KEY'] = 'liveness-detection-secret'
@@ -1220,13 +1226,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Store active sessions
 active_sessions: Dict[str, Dict[str, Any]] = {}
-
-# Store verification codes
 verification_codes: Dict[str, Dict[str, Any]] = {}
-
-# [CHANGED] Rate-limit dictionary
 last_log_time = {}
 
 @app.route('/')
@@ -1236,22 +1237,34 @@ def index():
 @app.route('/verify/<code>')
 def verify(code):
     logger.debug(f"Verify route called with code: {code}")
-    logger.debug(f"Current verification codes: {list(verification_codes.keys())}")
-    
-    if code not in verification_codes:
-        return render_template('error.html', 
-                               message="Invalid verification code", 
+    if code not in verification_codes or verification_codes[code]['status'] != 'pending':
+        return render_template('error.html',
+                               message="Invalid or expired verification code",
                                redirect_url="/")
-    
     return render_template('verify.html', session_code=code)
 
 @app.route('/check_code/<code>')
 def check_code(code):
     logger.debug(f"Check code route called with code: {code}")
-    logger.debug(f"Current verification codes: {list(verification_codes.keys())}")
-    
-    is_valid = code in verification_codes
+    is_valid = code in verification_codes and verification_codes[code]['status'] == 'pending'
     return jsonify({'valid': is_valid})
+
+def cleanup_session(session_id: str, code: str = None):
+    """Clean up a session and its associated QR code."""
+    if session_id in active_sessions:
+        session_data = active_sessions[session_id]
+        if session_data['detector'] is not None:
+            session_data['detector'].speech_recognizer.stop()
+        code = code or session_data.get('code')
+        if code and code in verification_codes:
+            qr_path = f"static/qr_codes/{code}.png"
+            if os.path.exists(qr_path):
+                os.remove(qr_path)
+                logger.info(f"Deleted QR code for session {session_id}: {code}")
+            verification_codes[code]['status'] = 'completed'
+            del verification_codes[code]
+        del active_sessions[session_id]
+        logger.info(f"Cleaned up session {session_id} with code {code}")
 
 @socketio.on('connect')
 def handle_connect():
@@ -1262,22 +1275,18 @@ def handle_connect():
 def handle_disconnect():
     session_id = request.sid
     logger.info(f"Client disconnected: {session_id}")
-    
-    if session_id in active_sessions:
-        if active_sessions[session_id]['detector'] is not None:
-            active_sessions[session_id]['detector'].speech_recognizer.stop()
-        del active_sessions[session_id]
+    cleanup_session(session_id)
 
 @socketio.on('frame')
 def handle_frame(data):
     session_id = request.sid
-    
     if session_id not in active_sessions:
         logger.warning(f"Received frame from unknown session: {session_id}")
         return
     
     if active_sessions[session_id].get('attempts', 0) >= 3:
         emit('max_attempts_reached')
+        cleanup_session(session_id)
         return
     
     active_sessions[session_id]['last_activity'] = time.time()
@@ -1307,9 +1316,11 @@ def handle_frame(data):
             'exit_flag': exit_flag
         })
         
-        if exit_flag:
+        if exit_flag and verification_result in ['PASS', 'FAIL']:
             active_sessions[session_id]['attempts'] = active_sessions[session_id].get('attempts', 0) + 1
-            
+            if verification_result == 'PASS' or active_sessions[session_id]['attempts'] >= 3:
+                cleanup_session(session_id)
+    
     except Exception as e:
         logger.error(f"Error processing frame: {e}")
         emit('error', {'message': str(e)})
@@ -1325,22 +1336,17 @@ def handle_reset(data):
     
     try:
         detector = active_sessions[session_id]['detector']
-        detector.challenge_manager.reset()  # [CHANGED] Now exists
-        detector.blink_detector.reset()
-        new_challenge = detector.challenge_manager.issue_new_challenge()
-        
-        if new_challenge:
-            target_word = new_challenge.split()[-1]
-            detector.speech_recognizer.set_target_word(target_word)
-            logger.info(f"New challenge issued after reset: {new_challenge}, Target word: {target_word}")
-        
+        detector.reset()
+        active_sessions[session_id]['attempts'] = active_sessions[session_id].get('attempts', 0) + 1
+        logger.info(f"Reset detector for session {session_id}, new challenge issued, attempt {active_sessions[session_id]['attempts']}")
         emit('reset_confirmed')
     except Exception as e:
-        logger.error(f"Error resetting verification: {e}", exc_info=True)
+        logger.error(f"Error resetting verification: {e}")
         emit('error', {'message': str(e)})
 
 @socketio.on('get_debug_status')
 def handle_get_debug_status():
+    logger.debug(f"Debug status requested: debug={config.DEBUG}, showDebugFrame={config.SHOW_DEBUG_FRAME}")
     emit('debug_status', {
         'debug': config.DEBUG,
         'showDebugFrame': config.SHOW_DEBUG_FRAME
@@ -1352,18 +1358,30 @@ def handle_generate_code():
     logger.info(f"Generate code request from session {session_id}")
     
     code = ''.join(random.choices(string.digits, k=6))
+    verification_url = f"{config.BASE_URL}/verify/{code}"
+    qr = qrcode.QRCode(version=1, box_size=10, border=5)
+    qr.add_data(verification_url)
+    qr.make(fit=True)
+    qr_img = qr.make_image(fill='black', back_color='white')
+    qr_path = f"static/qr_codes/{code}.png"
+    qr_img.save(qr_path)
+    
     verification_codes[code] = {
         'requester_id': session_id,
         'created_at': time.time(),
         'status': 'pending'
     }
     
-    logger.info(f"Emitting verification code {code} to session {session_id}")
-    emit('verification_code', {'code': code})
+    logger.info(f"Emitting verification code {code} with QR code to session {session_id}")
+    emit('verification_code', {'code': code, 'qr_code': f"/static/qr_codes/{code}.png"})
     
     def expire_code():
-        time.sleep(600)
+        time.sleep(600)  # 10 minutes
         if code in verification_codes and verification_codes[code]['status'] == 'pending':
+            qr_path = f"static/qr_codes/{code}.png"
+            if os.path.exists(qr_path):
+                os.remove(qr_path)
+                logger.info(f"Deleted QR code for expired code: {code}")
             del verification_codes[code]
             logger.info(f"Expired verification code {code}")
     
@@ -1377,16 +1395,13 @@ def cleanup_inactive_sessions():
         inactive_sessions = []
         
         for session_id, session_data in active_sessions.items():
-            if current_time - session_data['last_activity'] > 300:
+            if current_time - session_data['last_activity'] > config.SESSION_TIMEOUT:
                 inactive_sessions.append(session_id)
         
         for session_id in inactive_sessions:
-            logger.info(f"Cleaning up inactive session: {session_id}")
-            if active_sessions[session_id]['detector'] is not None:
-                active_sessions[session_id]['detector'].speech_recognizer.stop()
-            del active_sessions[session_id]
+            cleanup_session(session_id)
         
-        time.sleep(60)
+        time.sleep(10)  # Check every 10 seconds
 
 @socketio.on('join_verification')
 def handle_join_verification(data):
@@ -1394,14 +1409,8 @@ def handle_join_verification(data):
     code = data.get('code')
     
     logger.info(f"Client {session_id} joining verification session with code: {code}")
-    logger.debug(f"Current verification codes: {list(verification_codes.keys())}")
-    
-    if not code or code not in verification_codes:
-        emit('session_error', {'message': 'Invalid verification code'})
-        return
-    
-    if verification_codes[code]['status'] == 'in-progress':
-        emit('session_error', {'message': 'This verification session is already in progress'})
+    if not code or code not in verification_codes or verification_codes[code]['status'] != 'pending':
+        emit('session_error', {'message': 'Invalid or expired verification code'})
         return
     
     verification_codes[code]['status'] = 'in-progress'
@@ -1426,7 +1435,6 @@ def handle_join_verification(data):
 
 @socketio.on('process_frame')
 def handle_process_frame(data):
-    global last_log_time
     session_id = request.sid
     code = data.get('code')
     
@@ -1435,9 +1443,14 @@ def handle_process_frame(data):
         logger.debug(f"Processing frame for session {session_id}, code {code}")
         last_log_time[session_id] = current_time
     
-    if session_id not in active_sessions:
-        logger.warning(f"Received frame from unknown session: {session_id}")
-        emit('session_error', {'message': 'Invalid session'})
+    if session_id not in active_sessions or active_sessions[session_id]['code'] != code:
+        logger.warning(f"Received frame from unknown or invalid session: {session_id}, code: {code}")
+        emit('session_error', {'message': 'Invalid session or code'})
+        return
+    
+    if active_sessions[session_id].get('attempts', 0) >= 3:
+        emit('max_attempts_reached')
+        cleanup_session(session_id, code)
         return
     
     active_sessions[session_id]['last_activity'] = time.time()
@@ -1447,6 +1460,7 @@ def handle_process_frame(data):
         image_bytes = base64.b64decode(image_data)
         nparr = np.frombuffer(image_bytes, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        logger.debug(f"Frame decoded: shape={frame.shape if frame is not None else 'None'}")
         
         detector = active_sessions[session_id]['detector']
         result = detector.process_frame(frame)
@@ -1457,13 +1471,18 @@ def handle_process_frame(data):
         if display_frame is not None:
             _, buffer_disp = cv2.imencode('.jpg', display_frame)
             disp_b64 = base64.b64encode(buffer_disp).decode('utf-8')
+            logger.debug("Display frame encoded")
         else:
             disp_b64 = None
+            logger.debug("Display frame is None")
         
         debug_b64 = None
         if debug_frame is not None:
             _, buffer_dbg = cv2.imencode('.jpg', debug_frame)
             debug_b64 = base64.b64encode(buffer_dbg).decode('utf-8')
+            logger.debug("Debug frame encoded")
+        else:
+            logger.debug("Debug frame is None")
         
         emit_data = {
             'image': f"data:image/jpeg;base64,{disp_b64}" if disp_b64 else None,
@@ -1473,28 +1492,42 @@ def handle_process_frame(data):
             'word_completed': result['word_completed'],
             'time_remaining': result['time_remaining'],
             'verification_result': result['verification_result'],
-            'exit_flag': result['exit_flag']
+            'exit_flag': result['exit_flag'],
+            'duress_detected': result['duress_detected']
         }
-        
-        # [CHANGED] Rate-limited debug
-        if config.DEBUG and (session_id not in last_log_time or current_time - last_log_time[session_id] >= 1.0):
-            logger.debug(f"Emitting processed frame: challenge={result['challenge_text']}, "
-                         f"action_completed={result['action_completed']}, "
-                         f"has_debug_frame={debug_b64 is not None}")
-        
+        logger.debug(f"Emitting processed_frame: has_image={bool(disp_b64)}, has_debug={bool(debug_b64)}")
         emit('processed_frame', emit_data)
         
         if result['exit_flag']:
             active_sessions[session_id]['attempts'] = active_sessions[session_id].get('attempts', 0) + 1
-            if result['verification_result'] == 'PASS' or active_sessions[session_id]['attempts'] >= 3:
-                if code and code in verification_codes:
-                    verification_codes[code]['status'] = 'completed'
-                    verification_codes[code]['result'] = result['verification_result']
-                    requester_id = verification_codes[code]['requester_id']
+            logger.debug(f"Attempt {active_sessions[session_id]['attempts']} for session {session_id}")
+            requester_id = verification_codes[code]['requester_id']
+            if result['duress_detected']:
+                emit('verification_result', {
+                    'result': 'FAIL',
+                    'code': code,
+                    'duress_detected': True
+                }, room=requester_id)
+                cleanup_session(session_id, code)
+            elif result['verification_result'] == 'PASS':
+                emit('verification_result', {
+                    'result': 'PASS',
+                    'code': code,
+                    'duress_detected': False
+                }, room=requester_id)
+                cleanup_session(session_id, code)
+            elif result['verification_result'] == 'FAIL' or result['time_remaining'] <= 0:
+                if active_sessions[session_id]['attempts'] >= 3:
                     emit('verification_result', {
-                        'result': result['verification_result'],
-                        'code': code
+                        'result': 'FAIL',
+                        'code': code,
+                        'duress_detected': False
                     }, room=requester_id)
+                    cleanup_session(session_id, code)
+                else:
+                    detector.reset()
+                    logger.info(f"Reset detector after failure/timeout for session {session_id}, attempt {active_sessions[session_id]['attempts']}")
+                    emit('challenge', {'text': detector.challenge_manager.get_challenge_status()[0]})
     except Exception as e:
         logger.error(f"Error processing frame: {e}")
         emit('error', {'message': str(e)})
@@ -1505,23 +1538,22 @@ def handle_verification_complete(data):
     result = data.get('result')
     
     if code and code in verification_codes:
-        verification_codes[code]['status'] = 'completed'
-        verification_codes[code]['result'] = result
-        
         requester_id = verification_codes[code]['requester_id']
         emit('verification_result', {
             'result': result,
             'code': code
         }, room=requester_id)
-        
+        for session_id, session_data in list(active_sessions.items()):
+            if session_data.get('code') == code:
+                cleanup_session(session_id, code)
         logger.info(f"Verification {code} completed with result: {result}")
 
 if __name__ == '__main__':
+    os.makedirs('static/qr_codes', exist_ok=True)
     cleanup_thread = threading.Thread(target=cleanup_inactive_sessions)
     cleanup_thread.daemon = True
     cleanup_thread.start()
     
-    # [CHANGED] Use config for host/port/cert/key
     socketio.run(
         app,
         host=config.HOST,
@@ -1772,25 +1804,85 @@ input[type="text"]:focus {
     text-align: center;
 }
 
+#qr-display img {
+    margin-top: 15px;
+    max-width: 200px;
+    border-radius: 8px;
+    border: 1px solid #333;
+    object-fit: contain;
+    display: block;
+    margin: 0 auto;
+}
+
 .status-waiting {
-    color: #f39c12;
+    padding: 10px;
+    color: #3498db;
+    background-color: rgba(73, 100, 251, 0.2);
+    border: 1px solid rgba(73, 100, 251, 0.3);
+    border-radius: 8px;
     font-weight: 500;
     margin-top: 20px;
+    margin-bottom: 20px;
     text-align: center;
+    font-size: 20px;
+    transition: all 0.3s ease;
+}
+
+.status-progress {
+    padding: 10px;
+    color: #e0bd65;
+    background-color: rgba(248, 255, 48, 0.2); 
+    border: 1px solid rgba(248, 255, 48, 0.3);
+    border-radius: 8px;
+    font-weight: 500;
+    margin-top: 20px;
+    margin-bottom: 20px;
+    text-align: center;
+    font-size: 20px;
+    transition: all 0.3s ease;
 }
 
 .status-success {
+    padding: 10px;
     color: #4cd137;
+    background-color: rgba(46, 204, 113, 0.2);
+    border: 1px solid rgba(46, 204, 113, 0.3);
+    border-radius: 8px;
     font-weight: 500;
     margin-top: 20px;
+    margin-bottom: 20px;
     text-align: center;
+    font-size: 20px;
+    transition: all 0.3s ease;
 }
 
 .status-failed {
-    color: #e84118;
+    padding: 10px;
+    color: #e8603e;
+    background-color: rgba(231, 76, 60, 0.2);   
+    border: 1px solid rgba(231, 76, 60, 0.3);
+    border-radius: 8px;
     font-weight: 500;
     margin-top: 20px;
+    margin-bottom: 20px;
     text-align: center;
+    font-size: 20px;
+    transition: all 0.3s ease;
+}
+
+.status-duress {
+    padding: 10px;
+    color: #ff0000;
+    background-color: rgba(231, 76, 60, 0.2);
+    border: 1px solid rgba(231, 76, 60, 0.3);
+    border-radius: 8px;
+    font-weight: 500;
+    margin-top: 20px;
+    margin-bottom: 20px;
+    text-align: center;
+    font-size: 20px;
+    white-space: pre-line;
+    transition: all 0.3s ease;
 }
 
 .session-info {
@@ -1940,6 +2032,11 @@ input[type="text"]:focus {
     color: #c0392b;
 }
 
+.result-text.duress {
+    background-color: rgba(230, 126, 34, 0.3);
+    color: #e67e22;
+}
+
 .button {
     background-color: #2980b9;
     color: white;
@@ -2033,7 +2130,7 @@ input[type="text"]:focus {
 }
 
 .error-icon {
-    font-size: 48px;
+    font-size: 68px;
     color: #e74c3c;
     margin-bottom: 20px;
 }
@@ -2075,7 +2172,7 @@ input[type="text"]:focus {
     border: 1px solid rgba(52, 152, 219, 0.3);
 }
 
-/* Success/Failure overlay effects */
+/* Success/Failure/Duress overlay effects */
 .success-overlay {
     box-shadow: 0 0 20px 10px rgba(46, 204, 113, 0.6);
     filter: sepia(0.2) saturate(1.5) brightness(1.1) hue-rotate(60deg);
@@ -2088,21 +2185,27 @@ input[type="text"]:focus {
     border: 3px solid #e74c3c;
 }
 
-/* Update the debug frame styles */
+.duress-overlay {
+    box-shadow: 0 0 20px 10px rgba(230, 126, 34, 0.6);
+    filter: sepia(0.3) saturate(1.5) brightness(0.9) hue-rotate(10deg);
+    border: 3px solid #e67e22;
+}
+
+/* Debug frame styles */
 #debug-frame {
     width: 100%;
     height: auto;
     border-radius: 12px;
     border: 1px solid #333;
     box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
-    object-fit: contain; /* Keep aspect ratio */
+    object-fit: contain;
 }
 
 #processed-frame-container, .video-wrapper {
     width: 48%;
     max-width: 640px;
     height: auto;
-} 
+}
 
 
 ===== templates/error.html =====
@@ -2118,9 +2221,8 @@ input[type="text"]:focus {
 <body>
     <div class="container">
         <h1>Error</h1>
-        
         <div class="error-container">
-            <div class="error-icon">❌</div>
+            <div class="error-icon">⛔</div>
             <div class="error-message">{{ message }}</div>
             <a href="{{ redirect_url }}" class="button">Return to Home</a>
         </div>
@@ -2153,13 +2255,14 @@ input[type="text"]:focus {
         <div class="card-container">
             <div class="card">
                 <h2>Request Verification</h2>
-                <p>Generate a code and send it to someone to verify they're human</p>
+                <p>Generate a one-time code and QR code to verify someone’s identity</p>
                 <div id="request-container">
                     <button id="generate-code-btn" class="button">Generate Code</button>
                     <div id="code-display" class="hidden">
                         <h3>Your verification code:</h3>
                         <div class="verification-code"><span id="verification-code"></span></div>
-                        <p>Share this code with the person you want to verify</p>
+                        <div id="qr-display"></div> <!-- QR code display -->
+                        <p>Share this code or scan the QR code to verify (expires in 10 minutes)</p>
                         <div id="verification-status" class="status-waiting">
                             Waiting for verification...
                         </div>
@@ -2188,7 +2291,7 @@ input[type="text"]:focus {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script src="{{ url_for('static', filename='js/landing.js') }}"></script>
 </body>
-</html> 
+</html>
 
 
 ===== templates/verify.html =====
@@ -2210,12 +2313,11 @@ input[type="text"]:focus {
         
         <div class="video-container">
             <div class="video-wrapper">
-                <!-- [CHANGED] Mute the video so no audio feedback -->
-                <video id="webcam" autoplay playsinline muted></video>
+                <video id="webcam" autoplay playsinline muted crossOrigin="anonymous"></video>
                 <canvas id="overlay" style="display: none;"></canvas>
             </div>
             <div id="processed-frame-container">
-                <img id="debug-frame" alt="Debug Frame" class="hidden">
+                <img id="debug-frame" alt="Debug Frame">
             </div>
         </div>
         
@@ -2257,10 +2359,7 @@ input[type="text"]:focus {
 </html>
 
 
-
 ===== static/js/app.js =====
-
-// static/js/app.js
 
 document.addEventListener('DOMContentLoaded', () => {
     const video = document.getElementById('webcam');
@@ -2275,6 +2374,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const resultText = document.getElementById('result-text');
     const resetButton = document.getElementById('reset-button');
     const videoContainer = document.querySelector('.video-container');
+    const processedFrameContainer = document.getElementById('processed-frame-container');
     const sessionCode = document.getElementById('session-code').textContent;
     
     let socket;
@@ -2286,7 +2386,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let showDebugFrame = true;
     let frameCount = 0;
     
-    // Mute video to avoid any echo feedback
     video.muted = true;
     video.volume = 0;
 
@@ -2305,32 +2404,49 @@ document.addEventListener('DOMContentLoaded', () => {
             showDebugFrame = data.showDebugFrame;
             console.log(`Debug mode: ${isDebugMode}, Show debug frame: ${showDebugFrame}`);
             
-            isProcessing = true;  // Start processing frames after debug status
-            debugFrame.style.display = showDebugFrame ? 'block' : 'none';
-        });
-        
-        socket.on('session_joined', (data) => {
-            console.log('Verification session joined:', data);
+            // Set visibility based on server config
+            if (showDebugFrame) {
+                processedFrameContainer.classList.remove('hidden');
+                debugFrame.classList.remove('hidden');
+                videoContainer.classList.remove('single-video');
+            } else {
+                processedFrameContainer.classList.add('hidden');
+                debugFrame.classList.add('hidden');
+                videoContainer.classList.add('single-video');
+            }
+            
             isProcessing = true;
+            console.log('Processing started after debug status received');
+            requestAnimationFrame(captureAndSendFrame);
         });
         
         socket.on('processed_frame', (data) => {
-            // Minimal logging
             if (isDebugMode && frameCount % 30 === 0) {
-                console.log('processed_frame =>', data);
+                console.log('Received processed_frame:', {
+                    hasImage: !!data.image,
+                    hasDebugImage: !!data.debug_image,
+                    challenge: data.challenge,
+                    action: data.action_completed,
+                    word: data.word_completed,
+                    time: data.time_remaining,
+                    result: data.verification_result,
+                    duress: data.duress_detected
+                });
             }
             
-            // If we have a separate debug_image, use that in debugFrame
-            if (data.debug_image) {
+            // Handle debug frame visibility
+            if (showDebugFrame && data.debug_image) {
                 debugFrame.src = data.debug_image;
-                debugFrame.style.display = showDebugFrame ? 'block' : 'none';
+                processedFrameContainer.classList.add('visible');
+                videoContainer.classList.add('double-video');
+            } else if (data.image) {
+                debugFrame.src = data.image; // Fallback for non-debug mode
+                if (!showDebugFrame) {
+                    processedFrameContainer.classList.remove('visible');
+                    videoContainer.classList.remove('double-video');
+                }
             }
-            else if (data.image) {
-                debugFrame.src = data.image;
-                debugFrame.style.display = showDebugFrame ? 'block' : 'none';
-            }
-            
-            // Update UI
+        
             if (data.challenge) {
                 challengeText.textContent = data.challenge;
             } else {
@@ -2344,47 +2460,60 @@ document.addEventListener('DOMContentLoaded', () => {
                 timeRemaining.textContent = Math.max(0, Math.ceil(data.time_remaining)) + 's';
             }
             
-            // If we have a final result
             if (data.verification_result !== 'PENDING') {
-                isProcessing = false;
-                if (data.verification_result === 'PASS') {
-                    resultText.textContent = 'Verification Successful!';
-                    resultText.className = 'result-text success';
+                isProcessing = false; // Stop processing new frames
+                
+                // Freeze the video by pausing and capturing the last frame
+                video.pause();
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                canvas.style.display = 'block'; // Show canvas over video
+                
+                // Overlay result text
+                let resultMessage, textColor;
+                if (data.duress_detected) {
+                    resultMessage = 'Duress Detected!';
+                    textColor = '#ff0000';
+                    applyVideoEffect('duress');
+                } else if (data.verification_result === 'PASS') {
+                    resultMessage = 'Verification Successful!';
+                    textColor = '#4cd137';
                     applyVideoEffect('success');
-                    setTimeout(() => {
-                        window.location.href = '/';
-                    }, 3000);
                 } else {
-                    resultText.textContent = 'Verification Failed!';
-                    resultText.className = 'result-text failure';
+                    resultMessage = 'Verification Failed!';
+                    textColor = '#e8603e';
                     applyVideoEffect('failure');
-                    
-                    verificationAttempts++;
-                    if (verificationAttempts >= MAX_VERIFICATION_ATTEMPTS) {
-                        resultText.textContent = 'Maximum attempts reached. Verification failed.';
-                        setTimeout(() => {
-                            window.location.href = '/';
-                        }, 3000);
-                    } else {
-                        // Let them try again
-                        setTimeout(() => {
-                            resultContainer.classList.add('hidden');
-                            isProcessing = true;
-                            removeVideoEffect();
-                        }, 3000);
-                    }
                 }
+                
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; // Semi-transparent background
+                ctx.fillRect(0, canvas.height / 2 - 40, canvas.width, 80);
+                ctx.fillStyle = textColor;
+                ctx.font = 'bold 30px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(resultMessage, canvas.width / 2, canvas.height / 2 + 10);
+                
+                resultText.textContent = resultMessage;
+                resultText.className = `result-text ${data.duress_detected ? 'duress' : data.verification_result === 'PASS' ? 'success' : 'failure'}`;
                 resultContainer.classList.remove('hidden');
-            }
-            
-            // If still processing, capture next frame
-            if (isProcessing) {
+                
+                verificationAttempts++;
+                console.log(`Attempt ${verificationAttempts} of ${MAX_VERIFICATION_ATTEMPTS}`);
+                
+                if (data.verification_result === 'PASS' || data.duress_detected || verificationAttempts >= MAX_VERIFICATION_ATTEMPTS) {
+                    setTimeout(() => window.location.href = '/', 5000);
+                } else {
+                    setTimeout(() => {
+                        isProcessing = true;
+                        canvas.style.display = 'none';
+                        video.play();
+                        removeVideoEffect();
+                        requestAnimationFrame(captureAndSendFrame);
+                    }, 3000);
+                }
+            } else if (isProcessing) {
                 requestAnimationFrame(captureAndSendFrame);
             }
             
-            // Handle challenge timeout
             if (data.time_remaining <= 0 && data.verification_result === 'PENDING') {
-                console.log('Challenge timed out, resetting...');
                 socket.emit('reset', { code: sessionCode });
                 verificationAttempts++;
                 
@@ -2393,10 +2522,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     resultText.className = 'result-text failure';
                     resultContainer.classList.remove('hidden');
                     isProcessing = false;
+                    applyVideoEffect('failure');
+                    setTimeout(() => window.location.href = '/', 5000);
                 } else {
-                    challengeText.textContent = `Attempt ${verificationAttempts+1} of ${MAX_VERIFICATION_ATTEMPTS}...`;
+                    challengeText.textContent = `Attempt ${verificationAttempts + 1} of ${MAX_VERIFICATION_ATTEMPTS}...`;
                     setTimeout(() => {
                         challengeText.textContent = 'Waiting for new challenge...';
+                        isProcessing = true;
+                        requestAnimationFrame(captureAndSendFrame);
                     }, 2000);
                 }
             }
@@ -2412,16 +2545,12 @@ document.addEventListener('DOMContentLoaded', () => {
             resultText.textContent = 'Maximum verification attempts reached.';
             resultContainer.classList.remove('hidden');
             applyVideoEffect('failure');
+            setTimeout(() => window.location.href = '/', 5000);
         });
         
         socket.on('disconnect', () => {
             console.log('Disconnected from server');
             isProcessing = false;
-        });
-        
-        socket.on('join_success', (data) => {
-            console.log('Successfully joined verification session');
-            isProcessing = true;
         });
         
         socket.on('challenge', (data) => {
@@ -2436,32 +2565,28 @@ document.addEventListener('DOMContentLoaded', () => {
             videoContainer.classList.add('success-overlay');
         } else if (effect === 'failure') {
             videoContainer.classList.add('failure-overlay');
+        } else if (effect === 'duress') {
+            videoContainer.classList.add('duress-overlay');
         }
     }
     
     function removeVideoEffect() {
-        videoContainer.classList.remove('success-overlay', 'failure-overlay');
-        resultContainer.classList.add('hidden');
-    }
-    
-    function handleVerificationResult(result) {
-        if (result === 'PASS') {
-            resultText.textContent = 'Verification successful!';
-            resultText.className = 'result-text success';
-        } else if (result === 'FAIL') {
-            resultText.textContent = 'Verification failed.';
-            resultText.className = 'result-text failure';
-        }
+        videoContainer.classList.remove('success-overlay', 'failure-overlay', 'duress-overlay');
     }
     
     function captureAndSendFrame() {
-        console.log('captureAndSendFrame called');
-        if (!isProcessing) return;
+        if (!isProcessing) {
+            console.log('Processing stopped, not capturing frame');
+            return;
+        }
         
         try {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            console.log('drawImage succeeded');
-            const imageData = canvas.toDataURL('image/jpeg', 0.8);
+            const offscreenCanvas = document.createElement('canvas');
+            offscreenCanvas.width = video.videoWidth;
+            offscreenCanvas.height = video.videoHeight;
+            const offscreenCtx = offscreenCanvas.getContext('2d');
+            offscreenCtx.drawImage(video, 0, 0, offscreenCanvas.width, offscreenCanvas.height);
+            const imageData = offscreenCanvas.toDataURL('image/jpeg', 0.8);
             
             if (isDebugMode && frameCount % 30 === 0) {
                 console.log(`Sending frame #${frameCount}`);
@@ -2471,8 +2596,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 image: imageData,
                 code: sessionCode
             });
-            console.log('socket.emit(process_frame) called');
-            
             frameCount++;
         } catch (err) {
             console.error('Error capturing frame:', err);
@@ -2487,16 +2610,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     height: { ideal: 480 },
                     facingMode: 'user'
                 },
-                audio: true  // We capture audio for speech recognition, but we keep it muted locally
+                audio: true
             });
             video.srcObject = stream;
             video.onloadedmetadata = () => {
                 video.play().catch(err => console.error('Error playing video:', err));
-                // Set canvas size to match the video
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
-                // Start capturing frames
-                captureAndSendFrame();
+                requestAnimationFrame(captureAndSendFrame);
             };
         } catch (err) {
             console.error('Error accessing webcam:', err);
@@ -2506,16 +2627,14 @@ document.addEventListener('DOMContentLoaded', () => {
     
     resetButton.addEventListener('click', () => {
         if (socket && socket.connected) {
-            console.log('Sending reset request');
             socket.emit('reset', { code: sessionCode });
-            resultContainer.classList.add('hidden');
             isProcessing = true;
             removeVideoEffect();
+            requestAnimationFrame(captureAndSendFrame);
         }
     });
     
     function init() {
-        console.log('Initializing verification page');
         initSocket();
         initWebcam();
     }
@@ -2533,7 +2652,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 
-
 ===== static/js/landing.js =====
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -2545,9 +2663,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const submitCodeBtn = document.getElementById('submit-code-btn');
     const verifyContainer = document.getElementById('verify-container');
     const verifyStatus = document.createElement('div');
+    const qrDisplay = document.createElement('div'); // Add QR code display
     
     verifyStatus.className = 'verify-status';
     verifyContainer.appendChild(verifyStatus);
+    qrDisplay.id = 'qr-display';
+    codeDisplay.appendChild(qrDisplay); // Add QR display under code
     
     let socket;
     let currentCode = null;
@@ -2567,6 +2688,8 @@ document.addEventListener('DOMContentLoaded', () => {
         
         socket.on('error', (data) => {
             console.error('Socket error:', data);
+            verificationStatus.textContent = `Error: ${data.message}`;
+            verificationStatus.className = 'status-error';
         });
         
         socket.on('verification_code', (data) => {
@@ -2575,6 +2698,7 @@ document.addEventListener('DOMContentLoaded', () => {
             verificationCode.textContent = currentCode;
             codeDisplay.classList.remove('hidden');
             generateCodeBtn.classList.add('hidden');
+            qrDisplay.innerHTML = `<img src="${data.qr_code}" alt="QR Code for ${data.code}">`;
             
             // Update status
             verificationStatus.textContent = 'Waiting for verification...';
@@ -2582,25 +2706,26 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         socket.on('verification_started', (data) => {
-            verificationStatus.textContent = 'Verification in progress...';
-            verificationStatus.className = 'status-waiting';
+            if (data.code === currentCode) {
+                verificationStatus.textContent = 'Verification in progress...';
+                verificationStatus.className = 'status-progress';
+            }
         });
         
         socket.on('verification_result', (data) => {
-            if (data.result === 'PASS') {
-                verificationStatus.textContent = 'Verification PASSED ✅';
-                verificationStatus.className = 'status-success';
-            } else {
-                verificationStatus.textContent = 'Verification FAILED ❌';
-                verificationStatus.className = 'status-failed';
+            if (data.code === currentCode) {
+                if (data.duress_detected) {
+                    verificationStatus.textContent = 'Duress Detected!\n!!! DO NOT PROCEED !!!';
+                    verificationStatus.className = 'status-duress';
+                } else if (data.result === 'PASS') {
+                    verificationStatus.textContent = 'Verification PASSED';
+                    verificationStatus.className = 'status-success';
+                } else {
+                    verificationStatus.textContent = 'Verification FAILED';
+                    verificationStatus.className = 'status-failed';
+                }
+                // Status persists; no auto-reset here
             }
-            
-            // Re-enable generate button after 5 seconds
-            setTimeout(() => {
-                generateCodeBtn.classList.remove('hidden');
-                codeDisplay.classList.add('hidden');
-                currentCode = null;
-            }, 5000);
         });
         
         socket.on('code_error', (data) => {
@@ -2615,7 +2740,6 @@ document.addEventListener('DOMContentLoaded', () => {
             socket.emit('generate_code');
         } else {
             console.error('Socket not connected');
-            // Try to reconnect
             initSocket();
             setTimeout(() => {
                 if (socket && socket.connected) {
@@ -2632,7 +2756,6 @@ document.addEventListener('DOMContentLoaded', () => {
         verifyStatus.textContent = message;
         verifyStatus.className = 'verify-status error';
         
-        // Clear after 3 seconds
         setTimeout(() => {
             verifyStatus.textContent = '';
             verifyStatus.className = 'verify-status';
@@ -2644,7 +2767,6 @@ document.addEventListener('DOMContentLoaded', () => {
         verifyStatus.textContent = message;
         verifyStatus.className = 'verify-status success';
         
-        // Clear after 1 second before redirect
         setTimeout(() => {
             verifyStatus.textContent = '';
             verifyStatus.className = 'verify-status';
@@ -2660,13 +2782,11 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        // Show loading state
         submitCodeBtn.disabled = true;
         submitCodeBtn.textContent = 'Checking...';
         verifyStatus.textContent = 'Validating code...';
         verifyStatus.className = 'verify-status info';
         
-        // Check if code exists via fetch API
         fetch(`/check_code/${code}`)
             .then(response => {
                 if (!response.ok) {
@@ -2680,7 +2800,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 if (data.valid) {
                     showVerifySuccess('Code valid! Redirecting...');
-                    // Redirect to verification page with code
                     setTimeout(() => {
                         window.location.href = `/verify/${code}`;
                     }, 1000);
@@ -2705,5 +2824,5 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initialize
     initSocket();
-}); 
+});
 

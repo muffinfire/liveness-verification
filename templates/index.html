@@ -13,14 +13,14 @@
         <div class="card-container">
             <div class="card">
                 <h2>Request Verification</h2>
-                <p>Generate a code and send it to someone to verify they're human</p>
+                <p>Generate a one-time code and QR code to verify someone’s identity</p>
                 <div id="request-container">
                     <button id="generate-code-btn" class="button">Generate Code</button>
                     <div id="code-display" class="hidden">
                         <h3>Your verification code:</h3>
                         <div class="verification-code"><span id="verification-code"></span></div>
-                        <!-- QR code will be appended here by JavaScript -->
-                        <p>Share this code or scan the QR code to verify</p>
+                        <div id="qr-display"></div> <!-- QR code display -->
+                        <p>Share this code or scan the QR code to verify (expires in 10 minutes)</p>
                         <div id="verification-status" class="status-waiting">
                             Waiting for verification...
                         </div>

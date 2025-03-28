@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const resultText = document.getElementById('result-text');
     const resetButton = document.getElementById('reset-button');
     const videoContainer = document.querySelector('.video-container');
+    const processedFrameContainer = document.getElementById('processed-frame-container');
     const sessionCode = document.getElementById('session-code').textContent;
     
     let socket;
@@ -39,7 +40,18 @@ document.addEventListener('DOMContentLoaded', () => {
             isDebugMode = data.debug;
             showDebugFrame = data.showDebugFrame;
             console.log(`Debug mode: ${isDebugMode}, Show debug frame: ${showDebugFrame}`);
-            debugFrame.style.display = showDebugFrame ? 'block' : 'none';
+            
+            // Set visibility based on server config
+            if (showDebugFrame) {
+                processedFrameContainer.classList.remove('hidden');
+                debugFrame.classList.remove('hidden');
+                videoContainer.classList.remove('single-video');
+            } else {
+                processedFrameContainer.classList.add('hidden');
+                debugFrame.classList.add('hidden');
+                videoContainer.classList.add('single-video');
+            }
+            
             isProcessing = true;
             console.log('Processing started after debug status received');
             requestAnimationFrame(captureAndSendFrame);
@@ -59,16 +71,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
             
-            if (data.debug_image) {
+            // Handle debug frame visibility
+            if (showDebugFrame && data.debug_image) {
                 debugFrame.src = data.debug_image;
-                debugFrame.classList.remove('hidden');
-                debugFrame.style.display = showDebugFrame ? 'block' : 'none';
+                processedFrameContainer.classList.add('visible');
+                videoContainer.classList.add('double-video');
             } else if (data.image) {
-                debugFrame.src = data.image;
-                debugFrame.classList.remove('hidden');
-                debugFrame.style.display = showDebugFrame ? 'block' : 'none';
+                debugFrame.src = data.image; // Fallback for non-debug mode
+                if (!showDebugFrame) {
+                    processedFrameContainer.classList.remove('visible');
+                    videoContainer.classList.remove('double-video');
+                }
             }
-            
+        
             if (data.challenge) {
                 challengeText.textContent = data.challenge;
             } else {
@@ -83,37 +98,53 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             if (data.verification_result !== 'PENDING') {
-                isProcessing = false;
+                isProcessing = false; // Stop processing new frames
+                
+                // Freeze the video by pausing and capturing the last frame
+                video.pause();
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                canvas.style.display = 'block'; // Show canvas over video
+                
+                // Overlay result text
+                let resultMessage, textColor;
                 if (data.duress_detected) {
-                    resultText.textContent = 'Under Duress Detected!';
-                    resultText.className = 'result-text duress';
+                    resultMessage = 'Duress Detected!';
+                    textColor = '#ff0000';
                     applyVideoEffect('duress');
-                    resultContainer.classList.remove('hidden');
-                    setTimeout(() => window.location.href = '/', 5000);
                 } else if (data.verification_result === 'PASS') {
-                    resultText.textContent = 'Verification Successful!';
-                    resultText.className = 'result-text success';
+                    resultMessage = 'Verification Successful!';
+                    textColor = '#4cd137';
                     applyVideoEffect('success');
-                    resultContainer.classList.remove('hidden');
+                } else {
+                    resultMessage = 'Verification Failed!';
+                    textColor = '#e8603e';
+                    applyVideoEffect('failure');
+                }
+                
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; // Semi-transparent background
+                ctx.fillRect(0, canvas.height / 2 - 40, canvas.width, 80);
+                ctx.fillStyle = textColor;
+                ctx.font = 'bold 30px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(resultMessage, canvas.width / 2, canvas.height / 2 + 10);
+                
+                resultText.textContent = resultMessage;
+                resultText.className = `result-text ${data.duress_detected ? 'duress' : data.verification_result === 'PASS' ? 'success' : 'failure'}`;
+                resultContainer.classList.remove('hidden');
+                
+                verificationAttempts++;
+                console.log(`Attempt ${verificationAttempts} of ${MAX_VERIFICATION_ATTEMPTS}`);
+                
+                if (data.verification_result === 'PASS' || data.duress_detected || verificationAttempts >= MAX_VERIFICATION_ATTEMPTS) {
                     setTimeout(() => window.location.href = '/', 5000);
                 } else {
-                    resultText.textContent = 'Verification Failed!';
-                    resultText.className = 'result-text failure';
-                    applyVideoEffect('failure');
-                    resultContainer.classList.remove('hidden');
-                    
-                    verificationAttempts++;
-                    console.log(`Attempt ${verificationAttempts} of ${MAX_VERIFICATION_ATTEMPTS}`);
-                    if (verificationAttempts >= MAX_VERIFICATION_ATTEMPTS) {
-                        resultText.textContent = 'Maximum attempts reached. Verification failed.';
-                        setTimeout(() => window.location.href = '/', 5000);
-                    } else {
-                        setTimeout(() => {
-                            isProcessing = true;
-                            removeVideoEffect();
-                            requestAnimationFrame(captureAndSendFrame);
-                        }, 3000);
-                    }
+                    setTimeout(() => {
+                        isProcessing = true;
+                        canvas.style.display = 'none';
+                        video.play();
+                        removeVideoEffect();
+                        requestAnimationFrame(captureAndSendFrame);
+                    }, 3000);
                 }
             } else if (isProcessing) {
                 requestAnimationFrame(captureAndSendFrame);
@@ -128,9 +159,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     resultText.className = 'result-text failure';
                     resultContainer.classList.remove('hidden');
                     isProcessing = false;
+                    applyVideoEffect('failure');
                     setTimeout(() => window.location.href = '/', 5000);
                 } else {
-                    challengeText.textContent = `Attempt ${verificationAttempts+1} of ${MAX_VERIFICATION_ATTEMPTS}...`;
+                    challengeText.textContent = `Attempt ${verificationAttempts + 1} of ${MAX_VERIFICATION_ATTEMPTS}...`;
                     setTimeout(() => {
                         challengeText.textContent = 'Waiting for new challenge...';
                         isProcessing = true;
@@ -177,7 +209,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function removeVideoEffect() {
         videoContainer.classList.remove('success-overlay', 'failure-overlay', 'duress-overlay');
-        // Do not hide resultContainer here to keep status visible
     }
     
     function captureAndSendFrame() {

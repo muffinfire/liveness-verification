@@ -1,0 +1,11 @@
+version: '3'
+
+services:
+  facedetector:
+    build: .
+    container_name: facedetector
+    restart: unless-stopped
+    ports:
+      - "8001:8080"
+    environment:
+      - PORT=8080

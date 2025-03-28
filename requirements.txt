@@ -1,0 +1,9 @@
+Flask
+Flask-SocketIO
+opencv-python-headless
+numpy
+dlib
+qrcode[pil]
+pocketsphinx
+SpeechRecognition
+eventlet
