@@ -20,6 +20,9 @@ files=(
     "templates/verify.html"
     "static/js/app.js"
     "static/js/landing.js"
+    "requirements.txt"
+    "docker-compose.yml"
+    "Dockerfile"
 )
 
 # Clear the output file
