@@ -1,11 +1,10 @@
-version: '3'
-
 services:
-  facedetector:
+  facedetection:
     build: .
-    container_name: facedetector
-    restart: unless-stopped
+    container_name: facedetection
     ports:
-      - "8001:8080"
+      - "8001:8080"  # external:internal, so you can reach it at http://serverip:8001
     environment:
+      # if you want to override config port, do: PORT=8001, etc.
       - PORT=8080
+    restart: unless-stopped

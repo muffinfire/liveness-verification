@@ -1,6 +1,10 @@
+# Use Python 3.11-slim as a base (3.13 is bleeding-edge, not widely available)
 FROM python:3.11-slim
 
-# System dependencies
+# Create working dir
+WORKDIR /app
+
+# Install system packages required by dlib, pocketsphinx, opencv, pyaudio, Pillow, etc.
 RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
@@ -11,9 +15,8 @@ RUN apt-get update && apt-get install -y \
     libsm6 \
     libxrender1 \
     libffi-dev \
-    libsndfile1 \
-    libportaudio2 \
     libasound-dev \
+    libportaudio2 \
     libjpeg-dev \
     libpng-dev \
     libtiff-dev \
@@ -26,15 +29,16 @@ RUN apt-get update && apt-get install -y \
     libxcb1-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Create working directory
-WORKDIR /app
+# Copy and install Python dependencies
+COPY requirements.txt .
+RUN pip install --upgrade pip setuptools wheel
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy your files
+# Copy the rest of your code
 COPY . /app
 
-# Virtualenv optional; pip install directly
-RUN pip install --upgrade pip setuptools wheel \
- && pip install --no-cache-dir -r requirements.txt
+# EXPOSE the port your web_app.py uses (default is 8080 from Config())
+EXPOSE 8080
 
-# Entry point (change if needed)
-CMD ["python", "main.py"]
+# Default command to run your Flask SocketIO app
+CMD ["python", "web_app.py"]
