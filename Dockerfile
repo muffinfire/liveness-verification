@@ -1,37 +1,40 @@
 FROM python:3.11-slim
 
-WORKDIR /app
-
-# Install OS-level dependencies
+# System dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
-    pkg-config \
-    libx11-dev \
-    libgtk-3-dev \
-    libatlas-base-dev \
-    libjpeg-dev \
-    libpng-dev \
-    libavformat-dev \
-    libavcodec-dev \
-    libavdevice-dev \
-    libavfilter-dev \
-    libswscale-dev \
-    libavresample-dev \
-    libv4l-dev \
     libopenblas-dev \
     liblapack-dev \
-    libpq-dev \
-    portaudio19-dev \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    libx11-dev \
+    libxext-dev \
+    libsm6 \
+    libxrender1 \
+    libffi-dev \
+    libsndfile1 \
+    libportaudio2 \
+    libasound-dev \
+    libjpeg-dev \
+    libpng-dev \
+    libtiff-dev \
+    libavformat-dev \
+    libavcodec-dev \
+    libswscale-dev \
+    libpulse-dev \
+    libfreetype6-dev \
+    libharfbuzz-dev \
+    libxcb1-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy application files
+# Create working directory
+WORKDIR /app
+
+# Copy your files
 COPY . /app
 
-# Install Python requirements
-RUN pip install --upgrade pip
-RUN pip install -r requirements.txt
+# Virtualenv optional; pip install directly
+RUN pip install --upgrade pip setuptools wheel \
+ && pip install --no-cache-dir -r requirements.txt
 
-EXPOSE 8080
-
-CMD ["python", "web_app.py"]
+# Entry point (change if needed)
+CMD ["python", "main.py"]
