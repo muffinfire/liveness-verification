@@ -70,8 +70,8 @@ class Config:
     ]
 
     # [CHANGED] SSL and host/port in config
-    CERTFILE = 'cert.pem'
-    KEYFILE = 'key.pem'
+    #CERTFILE = 'cert.pem'
+    #KEYFILE = 'key.pem'
     HOST = '0.0.0.0'
     PORT = int(os.environ.get('PORT', 8080))
-    BASE_URL = 'https://192.168.8.126:8080'  # Configurable base URL for QR code
+    BASE_URL = 'http://192.168.8.126:8080'  # Configurable base URL for QR code

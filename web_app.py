@@ -364,7 +364,7 @@ if __name__ == '__main__':
         app,
         host=config.HOST,
         port=config.PORT,
-        debug=config.DEBUG,
-        certfile=config.CERTFILE,
-        keyfile=config.KEYFILE
+        debug=config.DEBUG
+        #certfile=config.CERTFILE,
+        #keyfile=config.KEYFILE
     )
