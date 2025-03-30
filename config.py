@@ -20,14 +20,14 @@ class Config:
     FACE_CONFIDENCE_THRESHOLD = 0.9
     FACE_NMS_THRESHOLD = 0.3
     
-    # Head pose thresholds (normalized)
-    HEAD_POSE_THRESHOLD_X = 0.06  # 8% of half frame width
-    HEAD_POSE_THRESHOLD_Y_UP = 0.08  # 8% for looking up
-    HEAD_POSE_THRESHOLD_Y_DOWN = 0.10  # 10% for looking down
-    
+    # Head pose thresholds for landmark-based detection
+    HEAD_POSE_THRESHOLD_HORIZONTAL = 0.4  # Symmetric deviation from 1.0 for left/right 3.5
+    HEAD_POSE_THRESHOLD_UP = 15           # Pixels for "up" (positive, negated in code) 10
+    HEAD_POSE_THRESHOLD_DOWN = 40         # Pixels for "down" 35
+    FACE_POSITION_HISTORY_LENGTH = 3      # Kept for responsiveness
+        
     # History lengths for tracking
     LANDMARK_HISTORY_MAX = 30  # Maximum frames to keep in landmark history
-    FACE_POSITION_HISTORY_LENGTH = 30  # Length of face position/angle history
     
     # Blink detection parameters
     BLINK_THRESHOLD = 0.25  # EAR threshold for blink detection
@@ -36,10 +36,10 @@ class Config:
     
     # Challenge parameters
     CHALLENGE_TIMEOUT = 10  # seconds
-    ACTION_SPEECH_WINDOW = 5.0  # seconds allowed between action and speech
+    ACTION_SPEECH_WINDOW = 10.0  # seconds allowed between action and speech
     
     # Speech recognition parameters
-    SPEECH_TIMEOUT = 5  # seconds
+    SPEECH_TIMEOUT = 10  # seconds
     SPEECH_PHRASE_LIMIT = 2  # seconds
     SPEECH_SAMPLING_RATE = 16000
     SPEECH_BUFFER_SIZE = 1024
