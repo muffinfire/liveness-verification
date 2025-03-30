@@ -232,7 +232,7 @@ class LivenessDetector:
         self.last_speech = self.speech_recognizer.get_last_speech()  # Update last speech
         self.logger.debug(f"Last speech: {self.last_speech}")  # Log last speech
         
-        # Check for duress keyword
+        # Check for duress keyword and set flag (actual handling moved to ChallengeManager)
         if self.last_speech.lower() == "verify":
             self.duress_detected = True
             self.logger.info("Duress detected: 'verify' spoken")  # Log duress detection
@@ -275,7 +275,7 @@ class LivenessDetector:
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)  # Green text for pass
                 final_result = 'PASS'
                 exit_flag = True
-            # Handle failed verification
+            # Handle failed verification (including timeout)
             elif verification_result == "FAIL":
                 self.status = "VERIFICATION FAILED"
                 cv2.putText(debug_frame if debug_frame is not None else display_frame,

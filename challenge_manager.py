@@ -73,6 +73,16 @@ class ChallengeManager:
         if last_speech and last_speech.strip():
             self.last_speech_time = current_time
         
+        # Check for duress keyword "verify"
+        if last_speech.lower() == "verify":
+            self.challenge_completed = True
+            self.verification_result = "FAIL"  # Treat duress as a failure
+            self.current_challenge = None      # End the current challenge
+            if self.speech_recognizer:
+                self.speech_recognizer.reset()
+            self.logger.info("Challenge failed due to duress keyword 'verify' detected")
+            return True  # Signal completion like a normal fail
+        
         action_is_happening = False
         # Check for head movement challenges
         if "turn left" in c and head_pose == "left":
