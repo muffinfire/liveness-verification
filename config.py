@@ -44,11 +44,11 @@ class Config:
     SPEECH_SAMPLING_RATE = 16000
     SPEECH_BUFFER_SIZE = 1024
     SPEECH_KEYWORDS = [
-        "blue /1e-3/",
-        "red /1e-3/",
-        "sky /1e-3/",
-        "ground /1e-3/",
-        "hello /1e-3/",
+        "clock /1e-3/",
+        "book /1e-3/",
+        "jump /1e-3/",
+        "fish /1e-3/",
+        "wind /1e-3/",
         "verify /1e-3/",
         "noise /1e-1/",
     ]
@@ -62,11 +62,11 @@ class Config:
     
     # Available challenges
     CHALLENGES = [
-        "Turn left and say blue", 
-        "Turn right and say red", 
-        "Look up and say sky", 
-        "Look down and say ground", 
-        "Blink twice and say hello"
+        "Turn left and say clock", 
+        "Turn right and say book", 
+        "Look up and say jump", 
+        "Look down and say fish", 
+        "Blink twice and say wind"
     ]
 
     # [CHANGED] SSL and host/port in config

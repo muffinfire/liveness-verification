@@ -85,35 +85,29 @@ class ChallengeManager:
                 self.challenge_action_completed = True
                 self.action_completion_time = time.time()
                 self.logger.debug(f"BLINK ACTION COMPLETED! Counter: {blink_counter}")
-            elif "nod your head" in c:
-                # if you detect nod
-                pass
-            elif "shake your head" in c:
-                # if you detect shake
-                pass
         
         # Word check
         if not self.challenge_word_completed:
-            if "say blue" in c and "blue" in last_speech:
+            if "say clock" in c and "clock" in last_speech:
                 self.challenge_word_completed=True
                 self.word_completion_time=time.time()
-                self.logger.debug("BLUE WORD COMPLETED!")
-            elif "say red" in c and "red" in last_speech:
+                self.logger.debug("CLOCK WORD COMPLETED!")
+            elif "say book" in c and "book" in last_speech:
                 self.challenge_word_completed=True
                 self.word_completion_time=time.time()
-                self.logger.debug("RED WORD COMPLETED!")
-            elif "say sky" in c and "sky" in last_speech:
+                self.logger.debug("BOOK WORD COMPLETED!")
+            elif "say jump" in c and "jump" in last_speech:
                 self.challenge_word_completed=True
                 self.word_completion_time=time.time()
-                self.logger.debug("SKY WORD COMPLETED!")
-            elif "say ground" in c and "ground" in last_speech:
+                self.logger.debug("JUMP WORD COMPLETED!")
+            elif "say fish" in c and "fish" in last_speech:
                 self.challenge_word_completed=True
                 self.word_completion_time=time.time()
-                self.logger.debug("GROUND WORD COMPLETED!")
-            elif "say hello" in c and "hello" in last_speech:
+                self.logger.debug("FISH WORD COMPLETED!")
+            elif "say wind" in c and "wind" in last_speech:
                 self.challenge_word_completed=True
                 self.word_completion_time=time.time()
-                self.logger.debug("HELLO WORD COMPLETED!")
+                self.logger.debug("WIND WORD COMPLETED!")
         
         # Check concurrency
         if self.challenge_action_completed and self.challenge_word_completed:

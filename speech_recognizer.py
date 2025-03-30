@@ -85,7 +85,7 @@ class SpeechRecognizer:
                     continue
 
                 # Otherwise, process recognized keywords.
-                possible_keywords = ["blue", "red", "sky", "ground", "hello", "verify", "noise"]
+                possible_keywords = ["clock", "book", "jump", "fish", "wind", "verify", "noise"]
                 first_word = None
                 for k in possible_keywords:
                     if k in text:
