@@ -22,8 +22,8 @@ class Config:
     
     # Head pose thresholds for landmark-based detection
     HEAD_POSE_THRESHOLD_HORIZONTAL = 0.4  # Symmetric deviation from 1.0 for left/right 3.5
-    HEAD_POSE_THRESHOLD_UP = 15           # Pixels for "up" (positive, negated in code) 10
-    HEAD_POSE_THRESHOLD_DOWN = 40         # Pixels for "down" 35
+    HEAD_POSE_THRESHOLD_UP = 10           # Pixels for "up" (positive, negated in code) 10
+    HEAD_POSE_THRESHOLD_DOWN = 20         # Pixels for "down" 35
     FACE_POSITION_HISTORY_LENGTH = 3      # Kept for responsiveness
         
     # History lengths for tracking

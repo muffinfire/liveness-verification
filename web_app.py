@@ -150,9 +150,14 @@ def handle_frame(data):
         # Process the frame for liveness detection (older method)
         display_frame, exit_flag = detector.detect_liveness(frame)
         
-        # Retrieve the current challenge status from the challenge manager
+        # Extract detection data for challenge status
+        head_pose = detector.head_pose  # Current head pose from detector state
+        blink_counter = detector.blink_count  # Current blink count from detector state
+        last_speech = detector.last_speech or ""  # Current speech, default to empty string if None
+        
+        # Retrieve the current challenge status with detection data
         challenge_text, action_completed, word_completed, verification_result = \
-            detector.challenge_manager.get_challenge_status()
+            detector.challenge_manager.get_challenge_status(head_pose, blink_counter, last_speech)
         
         # Encode the processed display frame back to JPEG format
         _, buffer = cv2.imencode('.jpg', display_frame)
@@ -326,8 +331,10 @@ def handle_join_verification(data):
     # Notify the requester that verification has started
     emit('verification_started', {'code': code}, room=requester_id)
     
-    # Get the initial challenge text from the detector and send it to the verifier
-    challenge_text, _, _, _ = detector.challenge_manager.get_challenge_status()
+    # Get the initial challenge text from the detector with initial state
+    challenge_text, _, _, _ = detector.challenge_manager.get_challenge_status(
+        detector.head_pose, detector.blink_count, detector.last_speech or ""
+    )
     emit('challenge', {'text': challenge_text})
 
 # SocketIO event handler for processing video frames (newer method, using process_frame)
@@ -357,15 +364,49 @@ def handle_process_frame(data):
     # Update the session’s last activity timestamp
     active_sessions[session_id]['last_activity'] = time.time()
     
+    # Extract and decode the frame
     try:
-        # Decode the base64-encoded image data from the client
         image_data = data['image'].split(',')[1]  # Remove data URI prefix
         image_bytes = base64.b64decode(image_data)  # Convert base64 to binary
-        nparr = np.frombuffer(image_bytes, np.uint8)  # Create NumPy array from binary data
-        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)  # Decode into an OpenCV image
-        logger.debug(f"Frame decoded: shape={frame.shape if frame is not None else 'None'}")
+    except Exception as e:
+        logger.error(f"Failed to decode base64 image data: {e}")
+        emit('error', {'message': 'Invalid image data'})
+        return
+    
+    # Check if the frame data is empty upfront
+    nparr = np.frombuffer(image_bytes, np.uint8)
+    if nparr.size == 0:
+        logger.debug("Received empty frame buffer; waiting for next frame")
+        emit('waiting_for_camera', {'message': 'Camera not ready yet'})
+        return
+    
+    # Decode with limited retries
+    frame = None
+    max_retries = 10  # Reduced from 50: 1 second total
+    retry_delay = 0.1  # 0.1s delay between retries
+    for attempt in range(max_retries):
+        try:
+            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)  # Decode into an OpenCV image
+            if frame is None:
+                logger.debug(f"Failed to decode frame on attempt {attempt + 1}/{max_retries}")
+                time.sleep(retry_delay)
+                continue
+            
+            logger.debug(f"Frame decoded successfully: shape={frame.shape}")
+            break  # Exit loop if decoding succeeds
         
-        # Process the frame using the session’s liveness detector
+        except Exception as e:
+            logger.error(f"Error decoding frame on attempt {attempt + 1}/{max_retries}: {e}")
+            time.sleep(retry_delay)
+    
+    # If frame is still None after retries, skip processing
+    if frame is None:
+        logger.warning(f"Failed to decode frame after {max_retries} attempts")
+        emit('error', {'message': 'Unable to process frame'})
+        return
+    
+    # Process the frame using the session’s liveness detector
+    try:
         detector = active_sessions[session_id]['detector']
         result = detector.process_frame(frame)  # Get detailed processing results
         
@@ -444,7 +485,11 @@ def handle_process_frame(data):
                     # Reset the detector for another attempt and send new challenge
                     detector.reset()
                     logger.info(f"Reset detector after failure/timeout for session {session_id}, attempt {active_sessions[session_id]['attempts']}")
-                    emit('challenge', {'text': detector.challenge_manager.get_challenge_status()[0]})
+                    challenge_text, _, _, _ = detector.challenge_manager.get_challenge_status(
+                        detector.head_pose, detector.blink_count, detector.last_speech or ""
+                    )
+                    emit('challenge', {'text': challenge_text})
+    
     except Exception as e:
         # Log any errors during frame processing
         logger.error(f"Error processing frame: {e}")

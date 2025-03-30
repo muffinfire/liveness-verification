@@ -57,7 +57,7 @@ class ActionDetector:
         # Extract key landmark points
         nose = np.array([landmarks.part(30).x, landmarks.part(30).y])  # Nose tip
         left_eye = np.array([landmarks.part(36).x, landmarks.part(36).y])  # Left eye corner
-        right_eye = np.array([landmarks.part(42).x, landmarks.part(42).y])  # Right eye corner
+        right_eye = np.array([landmarks.part(45).x, landmarks.part(45).y])  # Right eye corner
 
         # Calculate horizontal ratio (Right/Left instead of Left/Right)
         left_dist = np.linalg.norm(nose - left_eye)  # Distance from nose to left eye
