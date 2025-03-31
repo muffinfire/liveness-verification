@@ -10,8 +10,17 @@ HEAD_POSE_THRESHOLD_DOWN = 25         # Pixels for "down" (nose below center)
 FACE_POSITION_HISTORY_LENGTH = 3      # Number of frames for smoothing
 
 # Optionally set selected landmarks (1-indexed). Set to an empty list or None to display all landmarks.
-# For example: selected_landmarks = [37, 46, 31]
-selected_landmarks = []  # Set to [] to display all landmarks
+selected_landmarks = [37, 46, 31]  # Example selected landmarks; change as needed
+
+# Global variable to toggle between all and selected landmarks, default to showing all
+show_all_landmarks = True
+
+# Mouse callback function to toggle landmark display
+def toggle_landmarks(event, x, y, flags, param):
+    global show_all_landmarks
+    if event == cv2.EVENT_LBUTTONDOWN:  # Left mouse button click
+        show_all_landmarks = not show_all_landmarks
+        print(f"Clicked! Mode toggled to: {'All Landmarks' if show_all_landmarks else 'Selected Landmarks'}")
 
 # Initialise face detector and landmark predictor
 detector = dlib.get_frontal_face_detector()
@@ -22,6 +31,10 @@ face_angles = collections.deque(maxlen=FACE_POSITION_HISTORY_LENGTH)
 
 # Start video capture from the default webcam
 cap = cv2.VideoCapture(0)
+
+# Create a window and set the mouse callback
+cv2.namedWindow("Face Landmarks")
+cv2.setMouseCallback("Face Landmarks", toggle_landmarks)
 
 while True:
     ret, frame = cap.read()
@@ -35,19 +48,19 @@ while True:
     for face in faces:
         landmarks = predictor(gray, face)
 
-        # Draw landmarks (all or selected)
-        if selected_landmarks:
-            indices_to_show = [idx - 1 for idx in selected_landmarks if (idx - 1) < landmarks.num_parts]
-        else:
+        # Determine which landmarks to show based on toggle state
+        if show_all_landmarks or not selected_landmarks:
             indices_to_show = range(landmarks.num_parts)
+        else:
+            indices_to_show = [idx - 1 for idx in selected_landmarks if (idx - 1) < landmarks.num_parts]
 
+        # Draw landmarks
         for i in indices_to_show:
             x, y = landmarks.part(i).x, landmarks.part(i).y
             cv2.circle(frame, (x, y), 3, (0, 255, 0), -1)
             cv2.putText(frame, str(i + 1), (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
-        # Onscreen measurement for head pose detection using key landmarks:
-        # Nose tip: landmark 31 (index 30), left eye: landmark 37 (index 36), right eye: landmark 46 (index 45)
+        # Onscreen measurement for head pose detection using key landmarks
         if landmarks.num_parts > 45:
             nose = landmarks.part(30)
             left_eye = landmarks.part(36)
@@ -100,9 +113,14 @@ while True:
                 cv2.putText(frame, f"Nose Offset: {nose.y - face_center_y:.1f}", (50, 90),
                             cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
 
+        # Display current mode (all or selected landmarks)
+        mode_text = "All Landmarks" if show_all_landmarks else "Selected Landmarks"
+        cv2.putText(frame, f"Mode: {mode_text}", (50, 170),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+
     cv2.imshow("Face Landmarks", frame)
 
-    # Press 'q' to quit
+    # Press 'q' to quit, reduced delay for better responsiveness
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
