@@ -123,6 +123,14 @@ The Flask-based web application with SocketIO for real-time communication. Serve
 #### action_detector.py
 Detects specific head movements (e.g., turn left, look up) using dlib facial landmarks. Tracks action completion for challenges, enhancing liveness verification accuracy.
 
+#### static/js/app.js
+Client-side logic for the verification page (verify.html). Captures webcam frames, sends them to the server via SocketIO, updates the UI with challenge status, and handles results (pass, fail, duress) with visual effects.
+
+#### static/js/landing.js
+Manages the landing page (index.html) interactions. Handles code generation, QR code display, and code submission, communicating with the server via SocketIO to initiate or join verification sessions.
+
+
+
 Data Flow
 1. Client connects via WebSocket and requests a verification code.
 2. Server generates a QR code linking to a verification URL.
