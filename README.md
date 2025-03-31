@@ -66,9 +66,9 @@ Edit config.py to adjust parameters such as:
 Example config.py: (python)
 
     class Config:
-        HOST = '0.0.0.0'
-        PORT = 8080
-        DEBUG = True
+       HOST = '0.0.0.0'
+       PORT = 8080
+       DEBUG = True
        SESSION_TIMEOUT = 300  # 5 minutes
        BASE_URL = 'http://localhost:8080'
        CERTFILE = 'cert.pem'
@@ -98,61 +98,49 @@ The server will run on the configured HOST and PORT (e.g., http://localhost:8080
 * The system will process the video and audio in real-time, displaying results on-screen.
 * Verification ends with a "PASS" or "FAIL" result, or restarts if attempts remain (max 3).
 
-#### Architecture
-The application is structured into several key modules:
-1. web_app.py: Main Flask application with SocketIO for real-time communication.
-* Handles HTTP routes, WebSocket events, session management, and QR code generation.
-* Manages active sessions and verification codes in memory.
-* Runs a background thread to clean up inactive sessions.
+### Architecture
+#### blink_detector.py
+Handles eye detection and blink analysis using facial landmarks. It calculates the Eye Aspect Ratio (EAR) with dlib to detect blinks or falls back to Haar cascades if dlib fails. Outputs blink counts and debug visualizations.
 
-2. liveness_detector.py: Core liveness detection logic.
-* Integrates face detection, blink detection, head pose detection, and speech recognition.
-* Processes video frames and issues/verifies challenges via ChallengeManager.
-* Supports debug frames with facial landmarks for development.
+####  challenge_manager.py
+Manages liveness challenges (e.g., "Turn left and say clock"). Issues random challenges, verifies user actions (head pose, blinks, speech), and tracks completion status with timeouts and duress detection.
 
-3. action_detector.py: Detects head movements (left, right, up, down, center).
-* Uses dlib’s facial landmarks to calculate head pose based on nose and eye positions.
-* Applies smoothing over a history of frames for stable detection.
+####  config.py
+Defines configuration settings for the system, including camera resolution, thresholds for face and blink detection, challenge parameters, and available challenges. Centralizes all tunable constants.
 
-4. face_detector.py: Detects faces and tracks movement.
+####  face_detector.py
+Detects faces in video frames using Haar cascades and estimates head pose (left, right, up, down, center) based on face position. Provides face regions and movement detection for liveness analysis.
 
-5. blink_detector.py: Detects eye blinks using Eye Aspect Ratio (EAR).
+####  liveness_detector.py
+The core module integrating all components (face detection, blink detection, speech recognition, challenge management). Processes video frames to determine liveness, updates UI with status, and manages verification flow.
 
-6. speech_recognizer.py: Listens for and recognizes spoken words.
+####  speech_recognizer.py
+Implements real-time speech recognition using PocketSphinx. Listens for specific keywords (e.g., "clock," "verify") tied to challenges and updates the system with detected speech.
 
-7. challenge_manager.py: Generates and verifies liveness challenges.
+####  web_app.py
+The Flask-based web application with SocketIO for real-time communication. Serves the UI, generates verification codes and QR codes, processes video frames from clients, and manages session state.
 
-8. config.py: Centralised configuration settings.
+#### action_detector.py
+Detects specific head movements (e.g., turn left, look up) using dlib facial landmarks. Tracks action completion for challenges, enhancing liveness verification accuracy.
 
 Data Flow
 1. Client connects via WebSocket and requests a verification code.
-
 2. Server generates a QR code linking to a verification URL.
-
 3. Verifier scans the QR code, joins the session, and streams video/audio.
-
 4. Server processes frames, updates challenge status, and sends results back in real-time.
-
 5. Verification completes with a result sent to both requester and verifier.
 
 Features
 * Real-Time Processing: Video frames are analyzed instantly using OpenCV.
-
 * Multi-Factor Challenges: Combines head movements and speech for robust liveness proof.
-
 * Session Management: Tracks active sessions and expires inactive ones.
-
 * Duress Detection: Flags "verify" as a duress signal, failing the verification.
-
 * Debug Mode: Optional debug frames show facial landmarks and EAR values.
 
 Limitations
 * Requires a webcam and microphone, limiting use on devices without these.
-
 * dlib dependency may be challenging to install on some systems.
-
 * In-memory session storage (not persistent across restarts).
-
 * No user authentication beyond QR codes; add as needed for production.
 
 License
