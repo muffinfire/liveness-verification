@@ -75,7 +75,7 @@ class ChallengeManager:
             self.current_challenge = None
             if self.speech_recognizer:
                 self.speech_recognizer.reset()
-            self.logger.info("Challenge failed due to duress keyword 'verify'")
+            self.logger.info("Challenge exited due to duress 'verify'")
             return True
 
         # ACTION DETECTION
@@ -129,7 +129,8 @@ class ChallengeManager:
             self.current_challenge = None
             if self.speech_recognizer:
                 self.speech_recognizer.reset()
-            self.logger.info("Challenge PASSED! Action and speech matched")
+            self.logger.debug(f"Challenge PASSED! {self.current_challenge}")   
+            self.logger.info(f"Action: {action_is_happening} and speech: {word_is_happening}")
             return True
 
         return False
@@ -147,6 +148,7 @@ class ChallengeManager:
             ("look down" in c and head_pose == "down") or
             ("blink twice" in c and blink_counter >= 2)
         )
+
         word = c.split("say ")[-1] if "say " in c else ""
         word_status = last_speech.lower() == word
         return (self.current_challenge, action, word_status, self.verification_result)
@@ -169,3 +171,4 @@ class ChallengeManager:
         self.last_speech_time = None
         self.used_speech_time = None
         self.last_speech_word = None
+        self.logger.info("ChallengeManager reset")

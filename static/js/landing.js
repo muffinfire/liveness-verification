@@ -89,7 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Add click event listener to the generate code button
     generateCodeBtn.addEventListener('click', () => {
-        console.log('Generate code button clicked');
+        // console.log('Generate code button clicked');
         if (socket && socket.connected) { // Check if socket is already connected
             socket.emit('generate_code'); // Request a new code from the server
         } else {

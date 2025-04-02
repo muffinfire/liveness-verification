@@ -1,13 +1,22 @@
 """Configuration settings for the liveness detection system."""
 
 import os
+import logging
 
 class Config:
-    # Debug mode
-    DEBUG = True
-    
+    # Debug mode for browser
+    BROWSER_DEBUG = True
+
     # Show debug frame with eye tracking polygons, EAR values, etc.
     SHOW_DEBUG_FRAME = True
+
+    # Logging modes (Debug, Info, Error)
+    LOGGING_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    APP_LOGGING_LEVEL = logging.INFO
+    SPEECH_RECOGNIZER_LOGGING_LEVEL = logging.INFO
+    ACTION_DETECTOR_LOGGING_LEVEL = logging.INFO
+    CHALLENGE_MANAGER_LOGGING_LEVEL = logging.INFO
+    LIVENESS_DETECTOR_LOGGING_LEVEL = logging.INFO
 
     # Session timeout in seconds
     SESSION_TIMEOUT = 120
@@ -49,25 +58,29 @@ class Config:
         "book /1e-3/",
         "jump /1e-3/",
         "fish /1e-3/",
-        "wind /1e-3/",
+        "mind /1e-3/",
         "verify /1e-3/",
         "noise /1e-1/",
+    ]
+    ACTIONS= [
+        "turn left", 
+        "turn right", 
+        "look up", 
+        "look down", 
+        "blink twice"
     ]
     
     # Liveness scoring
     MIN_CONSECUTIVE_LIVE_FRAMES = 5
     MIN_CONSECUTIVE_FAKE_FRAMES = 5
-    
-    # Logging
-    LOGGING_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    
+
     # Available challenges
     CHALLENGES = [
         "Turn left and say clock", 
         "Turn right and say book", 
         "Look up and say jump", 
         "Look down and say fish", 
-        "Blink twice and say wind"
+        "Blink twice and say mind"
     ]
 
     # [CHANGED] SSL and host/port in config

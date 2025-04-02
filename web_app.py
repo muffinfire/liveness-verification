@@ -17,24 +17,33 @@ from typing import Dict, Any
 from config import Config
 from liveness_detector import LivenessDetector
 
+# Initialize Flask app
 app = Flask(__name__,
             static_folder='static',
             template_folder='templates')
 app.config['SECRET_KEY'] = 'liveness-detection-secret'
 
+# Initialize socketio
 socketio = SocketIO(app, cors_allowed_origins="*")
 
+# Initialize config
 config = Config()
 
-logging_level = logging.DEBUG if config.DEBUG else logging.INFO
-logging.basicConfig(
-    level=logging_level,
-    format=config.LOGGING_FORMAT
-)
+# Configure logging
+logging.basicConfig(level=config.APP_LOGGING_LEVEL, format=config.LOGGING_FORMAT)
+logging.getLogger('speech_recognizer').setLevel(config.SPEECH_RECOGNIZER_LOGGING_LEVEL)
+logging.getLogger('action_detector').setLevel(config.ACTION_DETECTOR_LOGGING_LEVEL)
+logging.getLogger('challenge_manager').setLevel(config.CHALLENGE_MANAGER_LOGGING_LEVEL)
+logging.getLogger('liveness_detector').setLevel(config.LIVENESS_DETECTOR_LOGGING_LEVEL)
 logger = logging.getLogger(__name__)
 
+# Initialize active sessions
 active_sessions: Dict[str, Dict[str, Any]] = {}
+
+# Initialize verification codes
 verification_codes: Dict[str, Dict[str, Any]] = {}
+
+# Initialize last log time
 last_log_time = {}
 
 @app.route('/')
@@ -158,9 +167,9 @@ def handle_reset(data):
 
 @socketio.on('get_debug_status')
 def handle_get_debug_status():
-    logger.debug(f"Debug status requested: debug={config.DEBUG}, showDebugFrame={config.SHOW_DEBUG_FRAME}")
+    logger.debug("Debug status requested")
     emit('debug_status', {
-        'debug': config.DEBUG,
+        'debug': config.BROWSER_DEBUG,
         'showDebugFrame': config.SHOW_DEBUG_FRAME
     })
 
@@ -237,10 +246,6 @@ def handle_join_verification(data):
 def handle_process_frame(data):
     session_id = request.sid
     code = data.get('code')
-    current_time = time.time()
-    if config.DEBUG and (session_id not in last_log_time or current_time - last_log_time.get(session_id, 0) >= 1.0):
-        logger.debug(f"Processing frame for session {session_id}, code {code}")
-        last_log_time[session_id] = current_time
     if session_id not in active_sessions or active_sessions[session_id]['code'] != code:
         logger.warning(f"Received frame from unknown or invalid session: {session_id}, code: {code}")
         emit('session_error', {'message': 'Invalid session or code'})
@@ -278,7 +283,7 @@ def handle_process_frame(data):
             logger.error(f"Error decoding frame on attempt {attempt + 1}/{max_retries}: {e}")
             time.sleep(retry_delay)
     if frame is None:
-        logger.warning(f"Failed to decode frame after {max_retries} attempts")
+        logger.error(f"Failed to decode frame after {max_retries} attempts")
         emit('error', {'message': 'Unable to process frame'})
         return
     try:
@@ -374,7 +379,7 @@ if __name__ == '__main__':
         app,
         host=config.HOST,
         port=config.PORT,
-        debug=config.DEBUG,
+        debug=config.BROWSER_DEBUG,
         certfile=config.CERTFILE,
         keyfile=config.KEYFILE
     )

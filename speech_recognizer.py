@@ -5,7 +5,7 @@ import time
 import logging
 import tempfile
 from config import Config
-from pocketsphinx import Decoder, get_model_path
+from pocketsphinx import Decoder
 import os
 
 class SpeechRecognizer:
@@ -14,7 +14,6 @@ class SpeechRecognizer:
     def __init__(self, config: Config):
         self.config = config
         self.logger = logging.getLogger(__name__)
-
         self.last_speech = ""
         self.speech_lock = threading.Lock()
         self.last_speech_time = 0
@@ -81,13 +80,11 @@ class SpeechRecognizer:
             return self.last_speech_time
     
     def process_audio_chunk(self, audio_chunk: bytes) -> None:
-        self.logger.debug(f"Processing audio chunk, size: {len(audio_chunk)}")
-        """
-        Process a chunk of raw audio data (16-bit PCM, 16kHz) streamed from the client.
-        """
+        self.logger.info(f"Processing audio chunk, size: {len(audio_chunk)}")
+
         # Add check: Do not process if decoder failed to initialize
         if self.decoder is None:
-            # self.logger.warning("Decoder not initialized, skipping audio processing.")
+            self.logger.warning("Decoder not initialized, skipping audio processing.")
             return
 
         try:
@@ -97,6 +94,7 @@ class SpeechRecognizer:
                 detected_text = hypothesis.hypstr.lower().strip()
                 now = time.time()
                 recognized_keyword = None
+                self.logger.info(f"Detected text: {detected_text}")
 
                 # Check target word first
                 if self.target_word and self.target_word in detected_text:
@@ -113,7 +111,7 @@ class SpeechRecognizer:
                                 recognized_keyword = k
                                 self.logger.info(f"Recognized keyword: {k} (full: '{detected_text}')")
                             else:
-                                self.logger.debug("Detected 'noise', ignoring.")
+                                self.logger.info("Detected 'noise', ignoring.")
                             break # Stop after first match
 
                 # Update state if a valid keyword was recognized
@@ -145,7 +143,7 @@ class SpeechRecognizer:
                 # Restart the utterance to clear internal state.
                 self.decoder.end_utt()
                 self.decoder.start_utt()
-                self.logger.debug("Speech recognizer reset.")
+                self.logger.info("Speech recognizer reset.")
             except Exception as e:
                  self.logger.error(f"Error resetting PocketSphinx utterance: {e}")
         else:

@@ -20,20 +20,7 @@ class LivenessDetector:
     def __init__(self, config: Config):
         """Initialize the liveness detector with configuration."""
         self.config = config  # Store the configuration object for settings access
-        # Set logging level based on debug mode from config
-        logging_level = logging.DEBUG if config.DEBUG else logging.INFO
-        logging.basicConfig(
-            level=logging_level,  # Define verbosity of logs
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'  # Log format with timestamp, name, level, and message
-        )
         self.logger = logging.getLogger(__name__)  # Create logger instance for this module
-        
-        # Reduce log verbosity in non-debug mode to warnings only
-        if not config.DEBUG:
-            for handler in logging.root.handlers:
-                handler.setLevel(logging.WARNING)
-        
-        logging_level = logging.WARNING
 
         # Initialize component detectors with the provided config
         self.face_detector = FaceDetector(config)  # Detects faces in frames
@@ -60,11 +47,12 @@ class LivenessDetector:
         self.blink_count = 0  # Default blink count for initial state
         self.last_speech = ""  # Default last spoken word for initial state
         
-        self.start_challenge()  # Begin the first liveness challenge
-        self.logger.debug("LivenessDetector initialized")  # Log initialization completion
+        self.logger.info("LivenessDetector initialized")  # Log initialization completion
+        
+        # Begin the first liveness challenge
+        self.start_challenge()  
     
     def detect_liveness(self, frame: np.ndarray) -> Tuple[np.ndarray, bool]:
-        """Process a frame for liveness detection (older method)."""
         display_frame = frame.copy()  # Create a copy of the frame for display
         
         # Detect face and its region of interest (ROI)
@@ -120,7 +108,7 @@ class LivenessDetector:
         else:
             self.start_challenge()  # Start a new challenge if none is active
         
-        # Draw face information and last spoken word on frame
+        # Draw face box information and last spoken word on frame
         self.face_detector.draw_face_info(display_frame, face_rect, self.status, self.liveness_score)
         cv2.putText(display_frame, f"Speech: {last_speech}", (10, display_frame.shape[0]-20),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
@@ -154,7 +142,9 @@ class LivenessDetector:
         if challenge_text:
             target_word = challenge_text.split()[-1]  # Extract the target word from challenge
             self.speech_recognizer.set_target_word(target_word)  # Set word to listen for
-        self.logger.debug(f"New challenge started: {challenge_text}")  # Log new challenge
+            self.logger.info(f"New challenge started: {challenge_text}")  # Log new challenge
+        else:
+            self.logger.error("Failed to start new challenge")  # Log error
     
     def process_frame(self, frame):
         """Process a frame for liveness detection (newer approach)."""
@@ -334,6 +324,7 @@ class LivenessDetector:
             self.liveness_score = 0.0
         
         self.logger.debug("Frame processing completed")  # Log completion
+       
         # Return comprehensive result dictionary
         return {
             'display_frame': display_frame,

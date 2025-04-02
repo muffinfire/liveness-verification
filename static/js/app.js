@@ -22,8 +22,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let stream = null; // Webcam media stream
     let verificationAttempts = 0; // Counter for verification attempts
     const MAX_VERIFICATION_ATTEMPTS = 3; // Maximum allowed attempts before failing
-    let isDebugMode = true; // Whether debug logging is enabled (set by server)
-    let showDebugFrame = true; // Whether to show the debug frame (set by server)
+    let isDebugMode = false; // Whether debug logging is enabled (set by server)
+    let showDebugFrame = false; // Whether to show the debug frame (set by server)
     let frameCount = 0; // Counter for frames sent to the server
     
     // Audio processing variables
@@ -52,10 +52,14 @@ document.addEventListener('DOMContentLoaded', () => {
         socket.on('debug_status', (data) => {
             isDebugMode = data.debug; // Set debug mode based on server config
             showDebugFrame = data.showDebugFrame; // Set whether to show debug frame
-            console.log(`Debug mode: ${isDebugMode}, Show debug frame: ${showDebugFrame}`);
+
+            if (isDebugMode) {
+                console.log(`Debug mode: ${isDebugMode}`);
+            }
             
             // Adjust UI visibility based on whether debug frame should be shown
             if (showDebugFrame) {
+                console.log(`Show debug frame: ${showDebugFrame}`);
                 processedFrameContainer.classList.remove('hidden'); // Show the debug frame container
                 debugFrame.classList.remove('hidden'); // Show the debug frame element
                 videoContainer.classList.remove('single-video'); // Adjust layout for dual video display
@@ -66,7 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             isProcessing = true; // Start processing frames
-            console.log('Processing started after debug status received');
+            console.log('Processing started');
             requestAnimationFrame(captureAndSendFrame); // Begin capturing and sending frames
         });
         
@@ -304,8 +308,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         // or handle resampling server-side if necessary.
                         // For now, we'll proceed, but be aware of potential issues.
                     }
+                    
                     // log the audio sample rate
-                    console.log(`Audio sample rate: ${audioContext.sampleRate}`);
+                    if (isDebugMode) {
+                        console.log(`Audio sample rate: ${audioContext.sampleRate}`); 
+                    }
                     audioSource = audioContext.createMediaStreamSource(stream);
                     scriptProcessor = audioContext.createScriptProcessor(bufferSize, 1, 1); // bufferSize, inputChannels=1, outputChannels=1
 
