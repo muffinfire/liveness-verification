@@ -123,13 +123,13 @@ def handle_frame(data):
         image_array = np.frombuffer(image_bytes, np.uint8)
         frame = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
         detector = active_sessions[session_id]['detector']
-        display_frame, exit_flag = detector.detect_liveness(frame)
+        frame, exit_flag = detector.detect_liveness(frame)
         head_pose = detector.head_pose
         blink_counter = detector.blink_count
         last_speech = detector.last_speech or ""
         challenge_text, action_completed, word_completed, verification_result = \
             detector.challenge_manager.get_challenge_status(head_pose, blink_counter, last_speech)
-        _, buffer = cv2.imencode('.jpg', display_frame)
+        _, buffer = cv2.imencode('.jpg', frame)
         encoded_frame = base64.b64encode(buffer).decode('utf-8')
         emit('processed_frame', {
             'image': f'data:image/jpeg;base64,{encoded_frame}',
@@ -289,10 +289,10 @@ def handle_process_frame(data):
     try:
         detector = active_sessions[session_id]['detector']
         result = detector.process_frame(frame)
-        display_frame = result['display_frame']
+        frame = result['frame']
         debug_frame = result['debug_frame']
-        if display_frame is not None:
-            _, buffer_disp = cv2.imencode('.jpg', display_frame)
+        if frame is not None:
+            _, buffer_disp = cv2.imencode('.jpg', frame)
             disp_b64 = base64.b64encode(buffer_disp).decode('utf-8')
             logger.debug("Display frame encoded")
         else:

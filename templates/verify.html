@@ -12,17 +12,7 @@
         <div class="session-info">
             <p>Session Code: <span id="session-code">{{ session_code }}</span></p>
         </div>
-        
-        <div class="video-container">
-            <div class="video-wrapper">
-                <video id="webcam" autoplay playsinline muted crossOrigin="anonymous"></video>
-                <canvas id="overlay" style="display: none;"></canvas>
-            </div>
-            <div id="processed-frame-container">
-                <img id="debug-frame" alt="Debug Frame">
-            </div>
-        </div>
-        
+
         <div class="challenge-container">
             <div id="challenge-text" class="challenge-text">Waiting for challenge...</div>
             <div class="status-container">
@@ -40,6 +30,18 @@
                 </div>
             </div>
         </div>
+        
+        <div class="video-container">
+            <div class="video-wrapper">
+                <video id="webcam" autoplay playsinline muted crossOrigin="anonymous"></video>
+                <canvas id="overlay" style="display: none;"></canvas>
+            </div>
+            <div id="processed-frame-container">
+                <img id="debug-frame" alt="Debug Frame">
+            </div>
+        </div>
+        
+
         
         <div id="result-container" class="result-container hidden">
             <div id="result-text" class="result-text"></div>

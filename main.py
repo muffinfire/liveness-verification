@@ -48,9 +48,9 @@ def main():
             logger.error("Error: Could not read frame")
             break
         
-        display_frame, exit_flag = detector.detect_liveness(frame)
+        frame, exit_flag = detector.detect_liveness(frame)
         
-        cv2.imshow("Liveness Detection", display_frame)
+        cv2.imshow("Liveness Detection", frame)
         
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q') or exit_flag:

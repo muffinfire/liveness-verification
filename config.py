@@ -8,7 +8,7 @@ class Config:
     BROWSER_DEBUG = True
 
     # Show debug frame with eye tracking polygons, EAR values, etc.
-    SHOW_DEBUG_FRAME = True
+    SHOW_DEBUG_FRAME = False
 
     # Logging modes (Debug, Info, Error)
     LOGGING_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -53,7 +53,7 @@ class Config:
     SPEECH_PHRASE_LIMIT = 2  # seconds
     SPEECH_SAMPLING_RATE = 48000
     SPEECH_BUFFER_SIZE = 1024
-    
+
     SPEECH_KEYWORDS = {
         "clock": 1e-3,
         "book": 1e-3,
