@@ -40,7 +40,7 @@ class ActionDetector:
         self.current_action = action  # Assign new action
         self.action_completed = False  # Reset completion flag
         self.action_start_time = None  # Clear start time
-        self.logger.debug(f"Action set to: {action}")  # Log action setting
+        self.logger.info(f"Action set to: {action}")  # Log action setting
     
     def detect_head_pose(self, frame: np.ndarray, face_rect: Tuple[int, int, int, int]) -> str:
         """

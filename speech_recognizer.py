@@ -22,12 +22,13 @@ class SpeechRecognizer:
 
         # Create a temporary keyword file
         keywords = config.SPEECH_KEYWORDS
+        
         try:
             # Ensure the temp file has a recognizable suffix if needed, though usually not required
             with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix=".kws") as tmp_f:
                 self.keyword_file = tmp_f.name
-                for kw in keywords:
-                    tmp_f.write(kw + "\n")
+                for word, threshold in keywords.items():
+                    tmp_f.write(f"{word} /{threshold}/\n")
             self.logger.info(f"Keyword file created: {self.keyword_file}")
         except Exception as e:
             self.logger.error(f"Failed to create keyword file: {e}")
@@ -80,7 +81,7 @@ class SpeechRecognizer:
             return self.last_speech_time
     
     def process_audio_chunk(self, audio_chunk: bytes) -> None:
-        self.logger.info(f"Processing audio chunk, size: {len(audio_chunk)}")
+        self.logger.debug(f"Processing audio chunk, size: {len(audio_chunk)}")
 
         # Add check: Do not process if decoder failed to initialize
         if self.decoder is None:
@@ -103,9 +104,7 @@ class SpeechRecognizer:
 
                 # Otherwise, check general keywords
                 else:
-                    # Extract keywords from config for checking (remove thresholds)
-                    possible_keywords = [kw.split('/')[0].strip() for kw in self.config.SPEECH_KEYWORDS]
-                    for k in possible_keywords:
+                    for k in self.config.SPEECH_KEYWORDS:
                         if k in detected_text:
                             if k != "noise": # Treat noise differently or ignore based on goal
                                 recognized_keyword = k

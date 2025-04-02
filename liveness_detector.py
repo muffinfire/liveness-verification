@@ -142,7 +142,6 @@ class LivenessDetector:
         if challenge_text:
             target_word = challenge_text.split()[-1]  # Extract the target word from challenge
             self.speech_recognizer.set_target_word(target_word)  # Set word to listen for
-            self.logger.info(f"New challenge started: {challenge_text}")  # Log new challenge
         else:
             self.logger.error("Failed to start new challenge")  # Log error
     

@@ -53,15 +53,16 @@ class Config:
     SPEECH_PHRASE_LIMIT = 2  # seconds
     SPEECH_SAMPLING_RATE = 48000
     SPEECH_BUFFER_SIZE = 1024
-    SPEECH_KEYWORDS = [
-        "clock /1e-3/",
-        "book /1e-3/",
-        "jump /1e-3/",
-        "fish /1e-3/",
-        "mind /1e-3/",
-        "verify /1e-3/",
-        "noise /1e-1/",
-    ]
+    
+    SPEECH_KEYWORDS = {
+        "clock": 1e-3,
+        "book": 1e-3,
+        "jump": 1e-3,
+        "fish": 1e-3,
+        "mind": 1e-3,
+        "verify": 1e-3,
+        "noise": 1e-1,
+    }
     ACTIONS= [
         "turn left", 
         "turn right", 
