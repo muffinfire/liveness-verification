@@ -25,6 +25,10 @@
                     <span id="word-status">❌</span>
                 </div>
                 <div class="status-item">
+                    <span>Blinks</span>
+                    <span id="blink-status">❌</span>
+                </div>
+                <div class="status-item">
                     <span>Time</span>
                     <span id="time-remaining">0s</span>
                 </div>
@@ -36,8 +40,8 @@
                 <video id="webcam" autoplay playsinline muted crossOrigin="anonymous"></video>
                 <canvas id="overlay" style="display: none;"></canvas>
             </div>
-            <div id="processed-frame-container">
-                <img id="debug-frame" alt="Debug Frame">
+            <div id="processed-frame-container" class="hidden">
+                <img id="debug-frame" alt="Debug Frame" class="hidden">
             </div>
         </div>
         

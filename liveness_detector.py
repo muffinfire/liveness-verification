@@ -153,7 +153,9 @@ class LivenessDetector:
             self.blink_count = 0  # Reset blink count when no face
         else:
             self.logger.debug(f"Face detected at {face_rect}")  # Log face detection
-            self.blink_detector.detect_blinks(frame, face_rect, face_roi)  # Detect blinks
+            blink_detected = self.blink_detector.detect_blinks(frame, face_rect, face_roi)  # Detect blinks
+            if blink_detected:
+                self.logger.info("Blink detected in liveness detector")  # Log blink detection
             self.blink_count = self.blink_detector.blink_counter  # Update blink count
             self.logger.debug(f"Blink count: {self.blink_count}")  # Log blink count
             
@@ -168,6 +170,48 @@ class LivenessDetector:
                 # Extract eye landmark coordinates
                 left_eye = [(landmarks.part(i).x + x, landmarks.part(i).y + y) for i in range(36, 42)]
                 right_eye = [(landmarks.part(i).x + x, landmarks.part(i).y + y) for i in range(42, 48)]
+                
+                # Draw face bounding box with padding
+                padding = 20
+                cv2.rectangle(debug_frame, 
+                             (x - padding, y - padding), 
+                             (x + w + padding, y + h + padding), 
+                             (0, 255, 255), 2)  # Yellow box around face
+                
+                # Get current challenge details
+                challenge_text, action_completed, word_completed, _ = \
+                    self.challenge_manager.get_challenge_status(self.head_pose, self.blink_count, self.last_speech)
+                
+                # Extract action and word from challenge text
+                action_text = ""
+                word_text = ""
+                if challenge_text:
+                    if "turn left" in challenge_text.lower():
+                        action_text = "Look Left"
+                    elif "turn right" in challenge_text.lower():
+                        action_text = "Look Right"
+                    elif "look up" in challenge_text.lower():
+                        action_text = "Look Up"
+                    elif "look down" in challenge_text.lower():
+                        action_text = "Look Down"
+                    elif "blink twice" in challenge_text.lower():
+                        action_text = "Blink Twice"
+                    
+                    # Extract word to say
+                    if "say " in challenge_text.lower():
+                        word_text = "Say " + challenge_text.lower().split("say ")[-1]
+                
+                # Draw action text at the top of the bounding box
+                if action_text:
+                    cv2.putText(debug_frame, action_text, 
+                                (x, y - padding - 10),  # Position above the box
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+                
+                # Draw word text at the bottom of the bounding box
+                if word_text:
+                    cv2.putText(debug_frame, word_text, 
+                                (x, y + h + padding + 25),  # Position below the box
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
                 
                 # Draw eye outlines on debug frame
                 cv2.polylines(debug_frame, [np.array(left_eye)], True, (0, 255, 0), 1)
@@ -282,6 +326,7 @@ class LivenessDetector:
             'challenge_text': challenge_text,
             'action_completed': action_completed,
             'word_completed': word_completed,
+            'blink_completed': self.blink_count >= 3,
             'time_remaining': time_left,
             'duress_detected': self.duress_detected
         }

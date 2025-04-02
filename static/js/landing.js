@@ -49,7 +49,38 @@ document.addEventListener('DOMContentLoaded', () => {
             verificationCode.textContent = currentCode; // Display the code
             codeDisplay.classList.remove('hidden'); // Show the code display container
             generateCodeBtn.classList.add('hidden'); // Hide the generate button
-            qrDisplay.innerHTML = `<img src="${data.qr_code}" alt="QR Code for ${data.code}">`; // Display QR code image
+            
+            // Check if video background is enabled
+            if (data.enable_video_background) {
+                // Create video background container
+                const videoQrContainer = document.createElement('div');
+                videoQrContainer.className = 'video-qr-container';
+                
+                // Create video element for background
+                const videoBackground = document.createElement('video');
+                videoBackground.autoplay = true;
+                videoBackground.playsInline = true;
+                videoBackground.muted = true;
+                videoBackground.className = 'qr-video-background';
+                
+                // Create QR overlay element - ensure it's visible initially
+                const qrOverlay = document.createElement('div');
+                qrOverlay.className = 'qr-overlay';
+                qrOverlay.style.opacity = '1'; // Make sure QR code is fully visible initially
+                qrOverlay.innerHTML = `<img src="${data.qr_code}" alt="QR Code for ${data.code}">`;
+                
+                // Add elements to container
+                videoQrContainer.appendChild(videoBackground);
+                videoQrContainer.appendChild(qrOverlay);
+                qrDisplay.innerHTML = ''; // Clear existing content
+                qrDisplay.appendChild(videoQrContainer);
+                
+                // Initialize webcam for video background
+                initQrVideoBackground(videoBackground);
+            } else {
+                // Standard QR code display without video background
+                qrDisplay.innerHTML = `<img src="${data.qr_code}" alt="QR Code for ${data.code}">`; // Display QR code image
+            }
             
             // Update status to indicate waiting for verification
             verificationStatus.textContent = 'Waiting for verification...';
@@ -61,21 +92,105 @@ document.addEventListener('DOMContentLoaded', () => {
             if (data.code === currentCode) { // Check if it matches the current code
                 verificationStatus.textContent = 'Verification in progress...';
                 verificationStatus.className = 'status-progress'; // Apply in-progress styling
+                
+                // Handle partner video display if flag is set
+                if (data.partner_video) {
+                    // Find the QR code container
+                    const qrContainer = document.querySelector('.video-qr-container');
+                    const qrOverlay = document.querySelector('.qr-overlay');
+                    const videoBackground = document.querySelector('.qr-video-background');
+                    
+                    if (qrContainer && qrOverlay) {
+                        // Fade out QR code
+                        qrOverlay.style.transition = 'opacity 1.5s ease';
+                        qrOverlay.style.opacity = '0.1'; // Almost completely transparent
+                        
+                        // Add a label to indicate partner video is showing
+                        const partnerLabel = document.createElement('div');
+                        partnerLabel.className = 'partner-video-label';
+                        partnerLabel.textContent = 'Partner Video';
+                        qrContainer.appendChild(partnerLabel);
+                        
+                        // Remove the waiting message if it exists
+                        const waitingText = qrContainer.querySelector('.waiting-for-partner');
+                        if (waitingText) {
+                            waitingText.remove();
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Handle partner video frames coming from the verification page
+        socket.on('partner_video_frame', (data) => {
+            if (data.code === currentCode) {
+                // Find the video element for the QR background
+                const videoBackground = document.querySelector('.qr-video-background');
+                const qrContainer = document.querySelector('.video-qr-container');
+                
+                if (videoBackground && data.image) {
+                    // Create an image element to display the partner's video frame
+                    if (!qrContainer.querySelector('.partner-video-frame')) {
+                        const partnerVideoFrame = document.createElement('img');
+                        partnerVideoFrame.className = 'partner-video-frame';
+                        partnerVideoFrame.style.position = 'absolute';
+                        partnerVideoFrame.style.top = '0';
+                        partnerVideoFrame.style.left = '0';
+                        partnerVideoFrame.style.width = '100%';
+                        partnerVideoFrame.style.height = '100%';
+                        partnerVideoFrame.style.objectFit = 'contain'; // Changed from 'cover' to 'contain' to center the video
+                        partnerVideoFrame.style.zIndex = '1'; // Between video and overlay
+                        
+                        // Center the video in the container
+                        qrContainer.style.display = 'flex';
+                        qrContainer.style.justifyContent = 'center';
+                        qrContainer.style.alignItems = 'center';
+                        
+                        qrContainer.insertBefore(partnerVideoFrame, qrContainer.querySelector('.qr-overlay'));
+                    }
+                    
+                    // Update the image with the new frame
+                    const partnerVideoFrame = qrContainer.querySelector('.partner-video-frame');
+                    if (partnerVideoFrame) {
+                        partnerVideoFrame.src = data.image;
+                    }
+                }
             }
         });
         
         // Handle the final verification result from the server
         socket.on('verification_result', (data) => {
             if (data.code === currentCode) { // Check if it matches the current code
+                // Find the partner video frame if it exists
+                const partnerVideoFrame = document.querySelector('.partner-video-frame');
+                
                 if (data.duress_detected) {
                     verificationStatus.textContent = 'Duress Detected!\n!!! DO NOT PROCEED !!!'; // Duress warning
                     verificationStatus.className = 'status-duress'; // Apply duress styling
+                    
+                    // Apply orange/duress effect to partner video if it exists
+                    if (partnerVideoFrame) {
+                        partnerVideoFrame.style.filter = 'sepia(0.3) saturate(1.5) brightness(0.9) hue-rotate(10deg)';
+                        partnerVideoFrame.style.border = '3px solid #e67e22';
+                    }
                 } else if (data.result === 'PASS') {
                     verificationStatus.textContent = 'Verification PASSED'; // Success message
                     verificationStatus.className = 'status-success'; // Apply success styling
+                    
+                    // Apply green/success effect to partner video if it exists
+                    if (partnerVideoFrame) {
+                        partnerVideoFrame.style.filter = 'sepia(0.2) saturate(1.5) brightness(1.1) hue-rotate(60deg)';
+                        partnerVideoFrame.style.border = '3px solid #2ecc71';
+                    }
                 } else {
                     verificationStatus.textContent = 'Verification FAILED'; // Failure message
                     verificationStatus.className = 'status-failed'; // Apply failure styling
+                    
+                    // Apply red/failure effect to partner video if it exists
+                    if (partnerVideoFrame) {
+                        partnerVideoFrame.style.filter = 'sepia(0.3) saturate(1.5) brightness(0.9) hue-rotate(-20deg)';
+                        partnerVideoFrame.style.border = '3px solid #e74c3c';
+                    }
                 }
                 // Status persists; no auto-reset here
             }
@@ -85,6 +200,45 @@ document.addEventListener('DOMContentLoaded', () => {
         socket.on('code_error', (data) => {
             showVerifyError(data.message); // Display the error message
         });
+    }
+    
+    // Function to initialize QR code video background
+    // Note: We no longer initialize the user's webcam here
+    // The partner's video will be streamed from the verification page
+    async function initQrVideoBackground(videoElement) {
+        try {
+            // Create a placeholder for partner's video
+            // The actual video stream will come from the partner during verification
+            
+            // Add a message indicating waiting for partner
+            const waitingText = document.createElement('div');
+            waitingText.className = 'waiting-for-partner';
+            waitingText.textContent = 'Waiting for partner to connect...';
+            videoElement.parentNode.appendChild(waitingText);
+            
+            // We don't set videoElement.srcObject here anymore
+            // Instead, we'll receive the partner's video stream via WebRTC or server relay
+            
+            // When video starts playing, fade in the QR code overlay
+            videoElement.onloadedmetadata = () => {
+                videoElement.play().catch(err => console.error('Error playing video:', err));
+                
+                // Fade in QR code overlay after video starts
+                setTimeout(() => {
+                    const qrOverlay = videoElement.nextElementSibling;
+                    if (qrOverlay) {
+                        qrOverlay.style.opacity = '0.8'; // Start with 80% opacity
+                        
+                        // Gradually reduce opacity to 10-20%
+                        setTimeout(() => {
+                            qrOverlay.style.opacity = '0.2'; // Final 20% opacity
+                        }, 2000); // After 2 seconds
+                    }
+                }, 500);
+            };
+        } catch (err) {
+            console.error('Error accessing webcam for QR background:', err);
+        }
     }
     
     // Add click event listener to the generate code button

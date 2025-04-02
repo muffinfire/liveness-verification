@@ -92,7 +92,7 @@ class ChallengeManager:
         elif "look down" in c and head_pose == "down":
             action_is_happening = True
             self.logger.debug("DOWN action is happening")
-        elif "blink twice" in c and blink_counter >= 2:
+        elif "blink twice" in c and blink_counter >= 3:
             action_is_happening = True
             self.logger.debug(f"BLINK action is happening (Counter: {blink_counter})")
 
@@ -146,11 +146,20 @@ class ChallengeManager:
             ("turn right" in c and head_pose == "right") or
             ("look up" in c and head_pose == "up") or
             ("look down" in c and head_pose == "down") or
-            ("blink twice" in c and blink_counter >= 2)
+            ("blink twice" in c and blink_counter >= 3)
         )
 
         word = c.split("say ")[-1] if "say " in c else ""
-        word_status = last_speech.lower() == word
+        
+        # Check if word was spoken within the required time window (1.5 seconds)
+        word_in_time_window = False
+        if self.last_speech_word == word and self.last_speech_time:
+            time_diff = time.time() - self.last_speech_time
+            word_in_time_window = time_diff <= 1.5  # 1.5 second window
+            
+        # Word status is true only if the word matches AND is within time window
+        word_status = last_speech.lower() == word and word_in_time_window
+        
         return (self.current_challenge, action, word_status, self.verification_result)
 
     def get_challenge_time_remaining(self) -> float:

@@ -69,6 +69,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 videoContainer.classList.add('single-video'); // Adjust layout for single video
             }
             
+            // Ensure debug frame is not loaded when not needed
+            if (!showDebugFrame) {
+                debugFrame.src = ''; // Clear the src to prevent loading broken image
+            }
+            
             isProcessing = true; // Start processing frames
             console.log('Processing started');
             requestAnimationFrame(captureAndSendFrame); // Begin capturing and sending frames
@@ -110,9 +115,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 challengeText.textContent = 'Waiting for challenge...'; // Default message if no challenge
             }
             
-            // Update action and word completion status indicators
+            // Update action, word, and blink completion status indicators
             actionStatus.textContent = data.action_completed ? '✅' : '❌'; // Green check or red X
             wordStatus.textContent = data.word_completed ? '✅' : '❌'; // Green check or red X
+            
+            // Update blink status if element exists
+            const blinkStatus = document.getElementById('blink-status');
+            if (blinkStatus) {
+                blinkStatus.textContent = data.blink_completed ? '✅' : '❌'; // Green check or red X
+            }
             
             // Update remaining time display
             if (data.time_remaining !== undefined) {
@@ -122,6 +133,16 @@ document.addEventListener('DOMContentLoaded', () => {
             // Handle verification result when it's not pending
             if (data.verification_result !== 'PENDING') {
                 isProcessing = false; // Stop capturing new frames
+                
+                // Set all status indicators to green checkmarks if verification passed
+                if (data.verification_result === 'PASS') {
+                    actionStatus.textContent = '✅';
+                    wordStatus.textContent = '✅';
+                    const blinkStatus = document.getElementById('blink-status');
+                    if (blinkStatus) {
+                        blinkStatus.textContent = '✅';
+                    }
+                }
                 
                 // Freeze the video and overlay the result
                 video.pause(); // Pause the live video feed
@@ -165,13 +186,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (data.verification_result === 'PASS' || data.duress_detected || verificationAttempts >= MAX_VERIFICATION_ATTEMPTS) {
                     setTimeout(() => window.location.href = '/', 3000); // Redirect to home after 3 seconds
                 } else {
+                    // Use a longer delay (3 seconds) to account for the transition animation
                     setTimeout(() => {
                         isProcessing = true; // Resume processing
                         canvas.style.display = 'none'; // Hide the canvas
                         video.play(); // Resume the video
                         removeVideoEffect(); // Remove visual effect
-                        requestAnimationFrame(captureAndSendFrame); // Start capturing frames again
-                    }, 1000); // Wait 1 second before resuming
+                        
+                        // Update challenge text to indicate transition
+                        challengeText.textContent = 'Preparing new challenge...';
+                        
+                        // Add additional delay before starting the next challenge to compensate for animation time
+                        setTimeout(() => {
+                            requestAnimationFrame(captureAndSendFrame); // Start capturing frames again
+                        }, 2000); // Additional 2 second delay before starting next challenge
+                    }, 1000); // Initial 1 second delay
                 }
             } else if (isProcessing) {
                 requestAnimationFrame(captureAndSendFrame); // Continue capturing if still processing

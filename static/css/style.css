@@ -407,7 +407,15 @@ input[type="text"]:focus {
     }
     
     .video-wrapper, #processed-frame-container {
+        width: 80%; /* Scaled down by 20% */
+        margin: 0 auto; /* Center the video */
+        max-height: 80vh; /* Limit height to 80% of viewport height */
+    }
+    
+    #webcam, #debug-frame {
         width: 100%;
+        height: auto;
+        object-fit: contain;
     }
     
     .challenge-text {
@@ -416,6 +424,11 @@ input[type="text"]:focus {
     
     .status-item {
         font-size: 16px;
+    }
+    
+    /* Fix the gap on mobile when debug frame is enabled */
+    .video-container.double-video {
+        align-items: center;
     }
 }
 
@@ -474,22 +487,25 @@ input[type="text"]:focus {
 }
 
 /* Success/Failure/Duress overlay effects */
-.success-overlay {
+.success-overlay .video-wrapper {
     box-shadow: 0 0 20px 10px rgba(46, 204, 113, 0.6);
     filter: sepia(0.2) saturate(1.5) brightness(1.1) hue-rotate(60deg);
     border: 3px solid #2ecc71;
+    padding: 0;
 }
 
-.failure-overlay {
+.failure-overlay .video-wrapper {
     box-shadow: 0 0 20px 10px rgba(231, 76, 60, 0.6);
     filter: sepia(0.3) saturate(1.5) brightness(0.9) hue-rotate(-20deg);
     border: 3px solid #e74c3c;
+    padding: 0;
 }
 
-.duress-overlay {
+.duress-overlay .video-wrapper {
     box-shadow: 0 0 20px 10px rgba(230, 126, 34, 0.6);
     filter: sepia(0.3) saturate(1.5) brightness(0.9) hue-rotate(10deg);
     border: 3px solid #e67e22;
+    padding: 0;
 }
 
 /* Debug frame styles */
@@ -506,4 +522,81 @@ input[type="text"]:focus {
     width: 48%;
     max-width: 640px;
     height: auto;
+}
+
+/* QR code with video background styles */
+.video-qr-container {
+    position: relative;
+    width: 250px;
+    height: 250px;
+    margin: 0 auto;
+    overflow: hidden;
+    border-radius: 8px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+.qr-video-background {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.qr-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 1;
+    transition: opacity 1s ease;
+    z-index: 2;
+}
+
+.qr-overlay img {
+    width: 90%;
+    height: 90%;
+    object-fit: contain;
+}
+
+/* Add partner video label styles */
+.partner-video-label {
+    position: absolute;
+    top: 10px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    background-color: rgba(0, 0, 0, 0.6);
+    color: white;
+    padding: 5px;
+    font-size: 14px;
+    z-index: 10;
+}
+
+/* Waiting for partner message */
+.waiting-for-partner {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    text-align: center;
+    transform: translateY(-50%);
+    background-color: rgba(0, 0, 0, 0.6);
+    color: white;
+    padding: 10px;
+    font-size: 14px;
+    z-index: 5;
+}
+
+/* Partner video frame styles */
+.partner-video-frame {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 1;
 }

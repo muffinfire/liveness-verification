@@ -179,19 +179,31 @@ def handle_generate_code():
     logger.info(f"Generate code request from session {session_id}")
     code = ''.join(random.choices(string.digits, k=6))
     verification_url = f"{config.BASE_URL}/verify/{code}"
+    
+    # Create QR code with transparent background for overlay
     qr = qrcode.QRCode(version=1, box_size=10, border=5)
     qr.add_data(verification_url)
     qr.make(fit=True)
-    qr_img = qr.make_image(fill='black', back_color='white')
+    
+    # Create QR code with transparent background
+    qr_img = qr.make_image(fill='black', back_color=(255, 255, 255, 0))
+    
+    # Save the QR code with transparent background
     qr_path = f"static/qr_codes/{code}.png"
     qr_img.save(qr_path)
+    
     verification_codes[code] = {
         'requester_id': session_id,
         'created_at': time.time(),
         'status': 'pending'
     }
+    
     logger.info(f"Emitting verification code {code} with QR code to session {session_id}")
-    emit('verification_code', {'code': code, 'qr_code': f"/static/qr_codes/{code}.png"})
+    emit('verification_code', {
+        'code': code, 
+        'qr_code': f"/static/qr_codes/{code}.png",
+        'enable_video_background': True  # Flag to enable video background in QR code
+    })
     def expire_code():
         time.sleep(600)
         if code in verification_codes and verification_codes[code]['status'] == 'pending':
@@ -234,7 +246,10 @@ def handle_join_verification(data):
     }
     join_room(code)
     requester_id = verification_codes[code]['requester_id']
-    emit('verification_started', {'code': code}, room=requester_id)
+    emit('verification_started', {
+        'code': code, 
+        'partner_video': True  # Flag to indicate partner video should be shown
+    }, room=requester_id)
     detector = LivenessDetector(config)
     active_sessions[session_id]['detector'] = detector
     challenge_text, _, _, _ = detector.challenge_manager.get_challenge_status(
@@ -295,6 +310,15 @@ def handle_process_frame(data):
             _, buffer_disp = cv2.imencode('.jpg', frame)
             disp_b64 = base64.b64encode(buffer_disp).decode('utf-8')
             logger.debug("Display frame encoded")
+            
+            # Send partner video frame to requester if available
+            if code in verification_codes and 'requester_id' in verification_codes[code]:
+                requester_id = verification_codes[code]['requester_id']
+                # Send the partner's video frame to be displayed in the QR code background
+                emit('partner_video_frame', {
+                    'image': f"data:image/jpeg;base64,{disp_b64}",
+                    'code': code
+                }, room=requester_id)
         else:
             disp_b64 = None
             logger.debug("Display frame is None")
@@ -311,6 +335,7 @@ def handle_process_frame(data):
             'challenge': result['challenge_text'],
             'action_completed': result['action_completed'],
             'word_completed': result['word_completed'],
+            'blink_completed': result['blink_completed'],
             'time_remaining': result['time_remaining'],
             'verification_result': result['verification_result'],
             'exit_flag': result['exit_flag'],

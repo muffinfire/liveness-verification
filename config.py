@@ -8,7 +8,7 @@ class Config:
     BROWSER_DEBUG = True
 
     # Show debug frame with eye tracking polygons, EAR values, etc.
-    SHOW_DEBUG_FRAME = False
+    SHOW_DEBUG_FRAME = True
 
     # Logging modes (Debug, Info, Error)
     LOGGING_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
