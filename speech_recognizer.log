@@ -1,0 +1,2 @@
+ERROR: "acmod.c", line 73: Folder '/Users/adam/code_local/facedetection/.venv/lib/python3.13/site-packages/pocketsphinx/model/en-us' does not contain acoustic model definition 'mdef'
+ERROR: "dict.c", line 273: Failed to open dictionary file 'models/cmudict-en-us.dict' for reading: No such file or directory

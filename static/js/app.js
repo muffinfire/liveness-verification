@@ -26,9 +26,15 @@ document.addEventListener('DOMContentLoaded', () => {
     let showDebugFrame = true; // Whether to show the debug frame (set by server)
     let frameCount = 0; // Counter for frames sent to the server
     
+    // Audio processing variables
+    let audioContext = null; 
+    let scriptProcessor = null; 
+    let audioSource = null;
+    const bufferSize = 4096;
+    
     // Mute the video to avoid audio feedback
-    video.muted = true;
-    video.volume = 0;
+    // video.muted = true;
+    // video.volume = 0;
 
     // Initialize the Socket.IO connection and set up event listeners
     function initSocket() {
@@ -286,6 +292,52 @@ document.addEventListener('DOMContentLoaded', () => {
                 video.play().catch(err => console.error('Error playing video:', err)); // Start playing the video
                 canvas.width = video.videoWidth; // Set canvas size to match video
                 canvas.height = video.videoHeight;
+                
+                // --- Start Audio Processing ---
+                if (stream.getAudioTracks().length > 0) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    // Ensure the sample rate matches your PocketSphinx config (e.g., 16000)
+                    if (audioContext.sampleRate !== 16000) { 
+                        console.warn(`AudioContext sample rate (${audioContext.sampleRate}) doesn't match target (16000). Resampling might be needed or PocketSphinx config adjusted.`);
+                        // Note: Simple resampling isn't trivial in JS. 
+                        // Best practice is often to ensure capture matches target if possible, 
+                        // or handle resampling server-side if necessary.
+                        // For now, we'll proceed, but be aware of potential issues.
+                    }
+                    // log the audio sample rate
+                    console.log(`Audio sample rate: ${audioContext.sampleRate}`);
+                    audioSource = audioContext.createMediaStreamSource(stream);
+                    scriptProcessor = audioContext.createScriptProcessor(bufferSize, 1, 1); // bufferSize, inputChannels=1, outputChannels=1
+
+                    scriptProcessor.onaudioprocess = (audioProcessingEvent) => {
+                        if (!isProcessing) return; // Only process if verification is active
+
+                        const inputBuffer = audioProcessingEvent.inputBuffer;
+                        const inputData = inputBuffer.getChannelData(0); // Get audio data from the first channel
+
+                        // Convert Float32Array to Int16Array (PCM format expected by PocketSphinx)
+                        const output = new Int16Array(inputData.length);
+                        for (let i = 0; i < inputData.length; i++) {
+                            output[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
+                        }
+                        
+                        // Convert Int16Array buffer to Base64 string to send via Socket.IO
+                        const audioBase64 = btoa(String.fromCharCode.apply(null, new Uint8Array(output.buffer)));
+
+                        // Send the audio chunk to the server
+                        if (socket && socket.connected) {
+                            socket.emit('audio_chunk', { audio: audioBase64 });
+                        }
+                    };
+
+                    audioSource.connect(scriptProcessor);
+                    scriptProcessor.connect(audioContext.destination); // Connect to output (necessary even if not playing back)
+                    console.log("Audio processing setup complete.");
+                } else {
+                    console.warn("No audio track found in the stream.");
+                }
+                // --- End Audio Processing ---
+
                 requestAnimationFrame(captureAndSendFrame); // Start capturing frames
             };
         } catch (err) {
@@ -293,6 +345,27 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('Error accessing webcam: ' + err.message); // Alert the user
         }
     }
+
+    // Add cleanup for audio resources
+    window.addEventListener('beforeunload', () => {
+        if (socket && socket.connected) {
+            socket.disconnect(); 
+        }
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop()); 
+        }
+        // --- Stop Audio Processing ---
+        if (scriptProcessor) {
+            scriptProcessor.disconnect();
+        }
+        if (audioSource) {
+            audioSource.disconnect();
+        }
+        if (audioContext) {
+            audioContext.close();
+        }
+        // --- End Stop Audio Processing ---
+    });
     
     // Add click event listener to the reset button
     resetButton.addEventListener('click', () => {

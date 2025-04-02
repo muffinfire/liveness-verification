@@ -41,7 +41,7 @@ class Config:
     # Speech recognition parameters
     SPEECH_TIMEOUT = 10  # seconds
     SPEECH_PHRASE_LIMIT = 2  # seconds
-    SPEECH_SAMPLING_RATE = 16000
+    SPEECH_SAMPLING_RATE = 48000
     SPEECH_BUFFER_SIZE = 1024
     SPEECH_KEYWORDS = [
         "clock /1e-3/",

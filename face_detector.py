@@ -5,7 +5,7 @@ import numpy as np
 from collections import deque
 import logging
 from typing import Tuple, Optional
-
+import time
 from config import Config
 
 class FaceDetector:

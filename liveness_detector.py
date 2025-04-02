@@ -33,6 +33,8 @@ class LivenessDetector:
             for handler in logging.root.handlers:
                 handler.setLevel(logging.WARNING)
         
+        logging_level = logging.WARNING
+
         # Initialize component detectors with the provided config
         self.face_detector = FaceDetector(config)  # Detects faces in frames
         self.blink_detector = BlinkDetector(config)  # Tracks eye blinks
@@ -144,7 +146,7 @@ class LivenessDetector:
     def start_challenge(self):
         """Start a new challenge."""
         self.challenge_manager.issue_new_challenge()  # Generate a new challenge
-        self.speech_recognizer.start_listening()  # Begin listening for speech
+
         # Pass current state to get_challenge_status to avoid missing argument errors
         challenge_text, _, _, _ = self.challenge_manager.get_challenge_status(
             self.head_pose, self.blink_count, self.last_speech

@@ -216,34 +216,36 @@ class ChallengeManager:
     """Manages challenge issuance and verification."""
     
     def __init__(self, config: Config, speech_recognizer=None, blink_detector=None):
+        # Initialize with configuration and optional detectors
         self.config = config
-        self.speech_recognizer = speech_recognizer
-        self.blink_detector = blink_detector
-        self.logger = logging.getLogger(__name__)
+        self.speech_recognizer = speech_recognizer  # Speech recognition component
+        self.blink_detector = blink_detector       # Blink detection component
+        self.logger = logging.getLogger(__name__)  # Logger for debugging
         
-        self.current_challenge = None
-        self.challenge_completed = False
-        self.challenge_start_time = None
-        self.challenge_timeout = config.CHALLENGE_TIMEOUT
-        self.available_challenges = config.CHALLENGES
-        self.challenge_action_completed = False
-        self.challenge_word_completed = False
-        self.verification_result = None
-        self.action_completion_time = None
-        self.word_completion_time = None
+        # Challenge state variables
+        self.current_challenge = None             # Current active challenge
+        self.challenge_completed = False          # Completion status
+        self.challenge_start_time = None          # Timestamp of challenge start
+        self.challenge_timeout = config.CHALLENGE_TIMEOUT  # Timeout duration from config
+        self.available_challenges = config.CHALLENGES      # List of possible challenges
+        self.verification_result = None           # Result of verification (PASS/FAIL)
+        self.last_speech_time = None              # Timestamp of last detected speech
     
     def issue_new_challenge(self) -> str:
+        # Select and initialize a new random challenge
         self.current_challenge = random.choice(self.available_challenges)
         self.challenge_start_time = time.time()
         self.challenge_completed = False
-        self.challenge_action_completed = False
-        self.challenge_word_completed = False
         self.verification_result = None
-        self.action_completion_time = None
-        self.word_completion_time = None
+        self.last_speech_time = None
         
+        # Reset and configure speech recognizer if present
         if self.speech_recognizer:
             self.speech_recognizer.reset()
+            word = self.current_challenge.lower().split("say ")[-1]
+            self.speech_recognizer.set_target_word(word)
+        
+        # Reset blink detector if present
         if self.blink_detector:
             self.blink_detector.reset()
             self.logger.debug("Blink counter reset for new challenge")
@@ -252,11 +254,14 @@ class ChallengeManager:
         return self.current_challenge
     
     def verify_challenge(self, head_pose: str, blink_counter: int, last_speech: str) -> bool:
+        # Check if there's an active challenge
         if self.current_challenge is None:
             return False
         
+        # Log verification inputs for debugging
         self.logger.debug(f"Verifying - Head: {head_pose}, Blinks: {blink_counter}, Speech: '{last_speech}'")
         
+        # Check for timeout
         elapsed = time.time() - self.challenge_start_time
         if elapsed > self.challenge_timeout:
             self.verification_result = "FAIL"
@@ -267,116 +272,108 @@ class ChallengeManager:
             return True
         
         c = self.current_challenge.lower()
+        current_time = time.time()
         
-        # Action check
-        if not self.challenge_action_completed:
-            if "turn left" in c and head_pose == "left":
-                self.challenge_action_completed = True
-                self.action_completion_time = time.time()
-                self.logger.debug("LEFT ACTION COMPLETED!")
-            elif "turn right" in c and head_pose == "right":
-                self.challenge_action_completed = True
-                self.action_completion_time = time.time()
-                self.logger.debug("RIGHT ACTION COMPLETED!")
-            elif "look up" in c and head_pose == "up":
-                self.challenge_action_completed = True
-                self.action_completion_time = time.time()
-                self.logger.debug("UP ACTION COMPLETED!")
-            elif "look down" in c and head_pose == "down":
-                self.challenge_action_completed = True
-                self.action_completion_time = time.time()
-                self.logger.debug("DOWN ACTION COMPLETED!")
-            elif "blink twice" in c and blink_counter >= 2:
-                self.challenge_action_completed = True
-                self.action_completion_time = time.time()
-                self.logger.debug(f"BLINK ACTION COMPLETED! Counter: {blink_counter}")
-            elif "nod your head" in c:
-                # if you detect nod
-                pass
-            elif "shake your head" in c:
-                # if you detect shake
-                pass
+        # Update last speech timestamp if speech detected
+        if last_speech and last_speech.strip():
+            self.last_speech_time = current_time
         
-        # Word check
-        if not self.challenge_word_completed:
-            if "say blue" in c and "blue" in last_speech:
-                self.challenge_word_completed=True
-                self.word_completion_time=time.time()
-                self.logger.debug("BLUE WORD COMPLETED!")
-            elif "say red" in c and "red" in last_speech:
-                self.challenge_word_completed=True
-                self.word_completion_time=time.time()
-                self.logger.debug("RED WORD COMPLETED!")
-            elif "say sky" in c and "sky" in last_speech:
-                self.challenge_word_completed=True
-                self.word_completion_time=time.time()
-                self.logger.debug("SKY WORD COMPLETED!")
-            elif "say ground" in c and "ground" in last_speech:
-                self.challenge_word_completed=True
-                self.word_completion_time=time.time()
-                self.logger.debug("GROUND WORD COMPLETED!")
-            elif "say hello" in c and "hello" in last_speech:
-                self.challenge_word_completed=True
-                self.word_completion_time=time.time()
-                self.logger.debug("HELLO WORD COMPLETED!")
+        # Check for duress keyword "verify"
+        if last_speech.lower() == "verify":
+            self.challenge_completed = True
+            self.verification_result = "FAIL"  # Treat duress as a failure
+            self.current_challenge = None      # End the current challenge
+            if self.speech_recognizer:
+                self.speech_recognizer.reset()
+            self.logger.info("Challenge failed due to duress keyword 'verify' detected")
+            return True  # Signal completion like a normal fail
         
-        # Check concurrency
-        if self.challenge_action_completed and self.challenge_word_completed:
-            diff = abs((self.action_completion_time or 0) - (self.word_completion_time or 0))
-            self.logger.debug(
-                f"Time diff between action & speech: {diff:.2f}s "
-                f"(max {self.config.ACTION_SPEECH_WINDOW:.2f}s)"
-            )
-            if diff <= self.config.ACTION_SPEECH_WINDOW:
+        action_is_happening = False
+        # Check for head movement challenges
+        if "turn left" in c and head_pose == "left":
+            action_is_happening = True
+            self.logger.debug("LEFT action is happening")
+        elif "turn right" in c and head_pose == "right":
+            action_is_happening = True
+            self.logger.debug("RIGHT action is happening")
+        elif "look up" in c and head_pose == "up":
+            action_is_happening = True
+            self.logger.debug("UP action is happening")
+        elif "look down" in c and head_pose == "down":
+            action_is_happening = True
+            self.logger.debug("DOWN action is happening")
+        # Check for blink challenge
+        elif "blink twice" in c and blink_counter >= 2:
+            action_is_happening = True
+            self.logger.debug(f"BLINK action is happening (Counter: {blink_counter})")
+        
+        # Check for speech challenge
+        word = c.split("say ")[-1]
+        word_is_happening = last_speech.lower() == word
+        if word_is_happening:
+            self.logger.debug(f"WORD '{word}' detected")
+        
+        # Verify if both action and speech occur simultaneously
+        if action_is_happening and word_is_happening:
+            self.challenge_completed = True
+            self.verification_result = "PASS"
+            self.current_challenge = None
+            if self.speech_recognizer:
+                self.speech_recognizer.reset()
+            self.logger.info("Challenge PASSED! Action and speech concurrent")
+            return True
+        # Verify if action occurs within 1 second of speech
+        elif action_is_happening and self.last_speech_time:
+            diff = current_time - self.last_speech_time
+            if diff <= 1.0:
                 self.challenge_completed = True
                 self.verification_result = "PASS"
                 self.current_challenge = None
                 if self.speech_recognizer:
                     self.speech_recognizer.reset()
-                self.logger.info("Challenge PASSED!")
+                self.logger.info(f"Challenge PASSED! Action with recent speech (diff: {diff:.2f}s)")
                 return True
-            else:
-                self.logger.debug(f"Action & speech not concurrent (diff: {diff:.2f}s)")
         
         return False
     
-    def get_challenge_status(self) -> Tuple[Optional[str],bool,bool,Optional[str]]:
-        return (
-            self.current_challenge,
-            self.challenge_action_completed,
-            self.challenge_word_completed,
-            self.verification_result
+    def get_challenge_status(self, head_pose: str, blink_counter: int, last_speech: str) -> Tuple[Optional[str], bool, bool, Optional[str]]:
+        # Return current challenge status if no active challenge
+        if not self.current_challenge:
+            return (None, False, False, self.verification_result)
+        
+        c = self.current_challenge.lower()
+        # Check if required action is being performed
+        action = (
+            ("turn left" in c and head_pose == "left") or
+            ("turn right" in c and head_pose == "right") or
+            ("look up" in c and head_pose == "up") or
+            ("look down" in c and head_pose == "down") or
+            ("blink twice" in c and blink_counter >= 2)
         )
+        # Check if required word is spoken
+        word = c.split("say ")[-1] if "say " in c else ""
+        word_status = last_speech.lower() == word
+        return (self.current_challenge, action, word_status, self.verification_result)
     
     def get_challenge_time_remaining(self) -> float:
+        # Calculate and return remaining time for active challenge
         if self.current_challenge is None or self.challenge_start_time is None:
             return 0
         elapsed = time.time() - self.challenge_start_time
         return max(0, self.challenge_timeout - elapsed)
     
     def update(self, head_pose: str, blink_counter: int, last_speech: str) -> None:
-        """
-        Update the challenge manager with the latest detection results.
-        
-        Args:
-            blink_counter: Number of blinks detected
-            head_pose: Current head pose ("left", "right", "up", "down", etc.)
-            last_speech: Last recognized speech
-        """
+        # Update challenge verification if there's an active challenge
         if self.current_challenge:
             self.verify_challenge(head_pose, blink_counter, last_speech)
-
-    # [CHANGED] Added a reset method so we can call challenge_manager.reset()
+    
     def reset(self) -> None:
+        # Reset all challenge-related state variables
         self.current_challenge = None
         self.challenge_completed = False
         self.challenge_start_time = None
-        self.challenge_action_completed = False
-        self.challenge_word_completed = False
         self.verification_result = None
-        self.action_completion_time = None
-        self.word_completion_time = None
-
+        self.last_speech_time = None
 
 
 ===== config.py =====
@@ -403,14 +400,14 @@ class Config:
     FACE_CONFIDENCE_THRESHOLD = 0.9
     FACE_NMS_THRESHOLD = 0.3
     
-    # Head pose thresholds (normalized)
-    HEAD_POSE_THRESHOLD_X = 0.06  # 8% of half frame width
-    HEAD_POSE_THRESHOLD_Y_UP = 0.08  # 8% for looking up
-    HEAD_POSE_THRESHOLD_Y_DOWN = 0.10  # 10% for looking down
-    
+    # Head pose thresholds for landmark-based detection
+    HEAD_POSE_THRESHOLD_HORIZONTAL = 0.4  # Symmetric deviation from 1.0 for left/right 3.5
+    HEAD_POSE_THRESHOLD_UP = 10           # Pixels for "up" (positive, negated in code) 10
+    HEAD_POSE_THRESHOLD_DOWN = 35         # Pixels for "down" 35
+    FACE_POSITION_HISTORY_LENGTH = 3      # Kept for responsiveness
+        
     # History lengths for tracking
     LANDMARK_HISTORY_MAX = 30  # Maximum frames to keep in landmark history
-    FACE_POSITION_HISTORY_LENGTH = 30  # Length of face position/angle history
     
     # Blink detection parameters
     BLINK_THRESHOLD = 0.25  # EAR threshold for blink detection
@@ -419,19 +416,19 @@ class Config:
     
     # Challenge parameters
     CHALLENGE_TIMEOUT = 10  # seconds
-    ACTION_SPEECH_WINDOW = 5.0  # seconds allowed between action and speech
+    ACTION_SPEECH_WINDOW = 10.0  # seconds allowed between action and speech
     
     # Speech recognition parameters
-    SPEECH_TIMEOUT = 5  # seconds
+    SPEECH_TIMEOUT = 10  # seconds
     SPEECH_PHRASE_LIMIT = 2  # seconds
     SPEECH_SAMPLING_RATE = 16000
     SPEECH_BUFFER_SIZE = 1024
     SPEECH_KEYWORDS = [
-        "blue /1e-3/",
-        "red /1e-3/",
-        "sky /1e-3/",
-        "ground /1e-3/",
-        "hello /1e-3/",
+        "clock /1e-3/",
+        "book /1e-3/",
+        "jump /1e-3/",
+        "fish /1e-3/",
+        "wind /1e-3/",
         "verify /1e-3/",
         "noise /1e-1/",
     ]
@@ -445,11 +442,11 @@ class Config:
     
     # Available challenges
     CHALLENGES = [
-        "Turn left and say blue", 
-        "Turn right and say red", 
-        "Look up and say sky", 
-        "Look down and say ground", 
-        "Blink twice and say hello"
+        "Turn left and say clock", 
+        "Turn right and say book", 
+        "Look up and say jump", 
+        "Look down and say fish", 
+        "Blink twice and say wind"
     ]
 
     # [CHANGED] SSL and host/port in config
@@ -667,203 +664,211 @@ class FaceDetector:
 
 """Main liveness detection module integrating all components."""
 
-import cv2  # OpenCV library for image processing
-import numpy as np  # NumPy for numerical operations and array handling
-import time  # For timing operations (e.g., challenge duration)
-import logging  # For logging debug/info/error messages
-from typing import Tuple, Optional  # Type hints for better code readability
-import dlib  # Dlib library for facial landmark detection
+import cv2
+import numpy as np
+import time
+import logging
+from typing import Tuple, Optional
+import dlib
 
-# Import custom modules from the project
-from config import Config  # Configuration settings (e.g., DEBUG mode)
-from face_detector import FaceDetector  # Detects faces in frames
-from blink_detector import BlinkDetector  # Detects eye blinks
-from speech_recognizer import SpeechRecognizer  # Recognizes spoken words
-from challenge_manager import ChallengeManager  # Manages verification challenges
-from action_detector import ActionDetector  # Detects head pose actions
+from config import Config
+from face_detector import FaceDetector
+from blink_detector import BlinkDetector
+from speech_recognizer import SpeechRecognizer
+from challenge_manager import ChallengeManager
+from action_detector import ActionDetector
 
 class LivenessDetector:
     """Main class for liveness detection integrating all components."""
     
     def __init__(self, config: Config):
         """Initialize the liveness detector with configuration."""
-        self.config = config  # Store the configuration object
-        
-        # Set up logging based on DEBUG mode
+        self.config = config  # Store the configuration object for settings access
+        # Set logging level based on debug mode from config
         logging_level = logging.DEBUG if config.DEBUG else logging.INFO
         logging.basicConfig(
-            level=logging_level,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            level=logging_level,  # Define verbosity of logs
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'  # Log format with timestamp, name, level, and message
         )
-        self.logger = logging.getLogger(__name__)  # Logger instance for this class
+        self.logger = logging.getLogger(__name__)  # Create logger instance for this module
         
-        # If not in debug mode, reduce logging verbosity to warnings only
+        # Reduce log verbosity in non-debug mode to warnings only
         if not config.DEBUG:
             for handler in logging.root.handlers:
                 handler.setLevel(logging.WARNING)
         
-        # Initialise component detectors with the config
-        self.face_detector = FaceDetector(config)  # Detects faces
-        self.blink_detector = BlinkDetector(config)  # Detects blinks
-        self.action_detector = ActionDetector(config)  # Detects head poses
-        self.speech_recognizer = SpeechRecognizer(config)  # Recognizes speech
+        # Initialize component detectors with the provided config
+        self.face_detector = FaceDetector(config)  # Detects faces in frames
+        self.blink_detector = BlinkDetector(config)  # Tracks eye blinks
+        self.action_detector = ActionDetector(config)  # Detects head movements
+        self.speech_recognizer = SpeechRecognizer(config)  # Recognizes spoken words
         
-        # Initialise the challenge manager with speech and blink detectors
+        # Set up challenge manager with dependencies for liveness tasks
         self.challenge_manager = ChallengeManager(
-            config, 
+            config,
             speech_recognizer=self.speech_recognizer,
             blink_detector=self.blink_detector
         )
         
-        # Initialise counters and status variables
-        self.consecutive_live_frames = 0  # Count of frames indicating liveness
-        self.consecutive_fake_frames = 0  # Count of frames indicating non-liveness
+        # Initialize counters and state variables
+        self.consecutive_live_frames = 0  # Tracks consecutive frames indicating liveness
+        self.consecutive_fake_frames = 0  # Tracks consecutive frames indicating no liveness
         self.status = "Waiting for verification..."  # Current status message
-        self.liveness_score = 0.0  # Score indicating liveness (0.0 to 1.0)
-        self.duress_detected = False  # Flag for duress detection (e.g., "verify" spoken)
+        self.liveness_score = 0.0  # Score indicating liveness confidence
+        self.duress_detected = False  # Flag for detecting forced verification attempts
         
-        # Start the first challenge
-        self.start_challenge()
-        self.logger.debug("LivenessDetector initialized")  # Log initialization
+        # Initialize detection state for consistent challenge updates
+        self.head_pose = "center"  # Default head pose for initial state
+        self.blink_count = 0  # Default blink count for initial state
+        self.last_speech = ""  # Default last spoken word for initial state
+        
+        self.start_challenge()  # Begin the first liveness challenge
+        self.logger.debug("LivenessDetector initialized")  # Log initialization completion
     
     def detect_liveness(self, frame: np.ndarray) -> Tuple[np.ndarray, bool]:
-        """Process a frame for liveness detection (older method, kept for compatibility)."""
+        """Process a frame for liveness detection (older method)."""
         display_frame = frame.copy()  # Create a copy of the frame for display
         
-        # Detect face and get its region of interest (ROI) and rectangle coordinates
+        # Detect face and its region of interest (ROI)
         face_roi, face_rect = self.face_detector.detect_face(frame)
         
-        # If no face is detected, show a message and return
+        # Handle case where no face is detected
         if face_roi is None:
-            cv2.putText(display_frame, "No face detected", (50, 50), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)  # Red text
-            return display_frame, False  # Return frame and False (not done)
+            cv2.putText(display_frame, "No face detected", (50, 50),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)  # Display error text
+            return display_frame, False  # Return frame and indicate no exit
         
-        # Detect face movement and head pose
+        # Analyze face movement and head pose
         self.face_detector.detect_movement(face_rect)
-        head_pose = self.action_detector.detect_head_pose(display_frame, face_rect)
-        self.blink_detector.detect_blinks(frame, face_rect, face_roi)  # Detect blinks
-        last_speech = self.speech_recognizer.get_last_speech()  # Get last spoken word
+        head_pose = self.action_detector.detect_head_pose(display_frame, face_rect) or "center"  # Fallback to "center" if None
+        self.blink_detector.detect_blinks(frame, face_rect, face_roi)  # Check for blinks
+        last_speech = self.speech_recognizer.get_last_speech()  # Get latest spoken word
         
-        # Update challenge manager with current detections
+        # Update challenge status with detected features
         self.challenge_manager.update(head_pose, self.blink_detector.blink_counter, last_speech)
         
-        # Get current challenge status
+        # Retrieve current challenge details with detection state
         challenge_text, action_completed, word_completed, verification_result = \
-            self.challenge_manager.get_challenge_status()
+            self.challenge_manager.get_challenge_status(head_pose, self.blink_detector.blink_counter, last_speech)
         
-        # If there's an active challenge, process it
+        # Process active challenge
         if challenge_text is not None:
             self.challenge_manager.verify_challenge(
                 head_pose, self.blink_detector.blink_counter, last_speech
-            )  # Verify challenge completion
+            )  # Verify if challenge conditions are met
             
-            # Display challenge info on the frame
-            cv2.putText(display_frame, f"Challenge: {challenge_text}", (10, 30), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)  # White text
+            # Display challenge instructions and status on frame
+            cv2.putText(display_frame, f"Challenge: {challenge_text}", (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             time_remaining = self.challenge_manager.get_challenge_time_remaining()
-            cv2.putText(display_frame, f"Time: {time_remaining:.1f}s", (10, 60), 
+            cv2.putText(display_frame, f"Time: {time_remaining:.1f}s", (10, 60),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            action_status = "✓" if action_completed else "✗"  # Checkmark or cross
-            word_status = "✓" if word_completed else "✗"
-            cv2.putText(display_frame, f"Action: {action_status}", (10, 90), 
+            action_status = "✓" if action_completed else "✗"  # Action completion indicator
+            word_status = "✓" if word_completed else "✗"  # Word spoken indicator
+            cv2.putText(display_frame, f"Action: {action_status}", (10, 90),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            cv2.putText(display_frame, f"Word: {word_status}", (10, 120), 
+            cv2.putText(display_frame, f"Word: {word_status}", (10, 120),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             
-            # Display result if challenge is complete
+            # Handle verification outcomes
             if verification_result == "PASS":
-                cv2.putText(display_frame, "VERIFICATION PASSED", (50, 200), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)  # Green text
-                return display_frame, True  # Return frame and True (done)
+                cv2.putText(display_frame, "VERIFICATION PASSED", (50, 200),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)  # Success message
+                return display_frame, True  # Exit with success
             elif verification_result == "FAIL":
-                cv2.putText(display_frame, "VERIFICATION FAILED", (50, 200), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)  # Red text
-                return display_frame, True  # Return frame and True (done)
+                cv2.putText(display_frame, "VERIFICATION FAILED", (50, 200),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)  # Failure message
+                return display_frame, True  # Exit with failure
         else:
-            self.start_challenge()  # Start a new challenge if none exists
+            self.start_challenge()  # Start a new challenge if none is active
         
-        # Draw face info (e.g., bounding box, status) on the frame
+        # Draw face information and last spoken word on frame
         self.face_detector.draw_face_info(display_frame, face_rect, self.status, self.liveness_score)
-        
-        # Show last spoken word at the bottom
-        cv2.putText(display_frame, f"Speech: {last_speech}", (10, display_frame.shape[0]-20), 
+        cv2.putText(display_frame, f"Speech: {last_speech}", (10, display_frame.shape[0]-20),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
-        return display_frame, False  # Return frame and False (not done yet)
+        return display_frame, False  # Return frame and indicate processing continues
 
     def reset(self) -> None:
         """Reset all components to initial state."""
-        self.blink_detector.reset()  # Reset blink counter
-        self.speech_recognizer.reset()  # Reset speech recognition
-        self.challenge_manager.reset()  # Reset challenge state
+        self.blink_detector.reset()  # Clear blink detection state
+        self.speech_recognizer.reset()  # Clear speech recognition state
+        self.challenge_manager.reset()  # Clear challenge state
         self.consecutive_live_frames = 0  # Reset live frame counter
         self.consecutive_fake_frames = 0  # Reset fake frame counter
         self.status = "Waiting for verification..."  # Reset status message
         self.liveness_score = 0.0  # Reset liveness score
         self.duress_detected = False  # Reset duress flag
-        self.start_challenge()  # Start a new challenge
-        self.logger.debug("LivenessDetector reset")  # Log reset
+        self.head_pose = "center"  # Reset head pose to default
+        self.blink_count = 0  # Reset blink count to default
+        self.last_speech = ""  # Reset last speech to default
+        self.start_challenge()  # Begin a new challenge
+        self.logger.debug("LivenessDetector reset")  # Log reset action
 
     def start_challenge(self):
         """Start a new challenge."""
         self.challenge_manager.issue_new_challenge()  # Generate a new challenge
-        self.speech_recognizer.start_listening()  # Start listening for speech
-        challenge_text, _, _, _ = self.challenge_manager.get_challenge_status()  # Get challenge text
+        self.speech_recognizer.start_processing()
+        # Begin listening for speech
+        # Pass current state to get_challenge_status to avoid missing argument errors
+        challenge_text, _, _, _ = self.challenge_manager.get_challenge_status(
+            self.head_pose, self.blink_count, self.last_speech
+        )
         if challenge_text:
-            target_word = challenge_text.split()[-1]  # Extract target word (e.g., "sky")
-            self.speech_recognizer.set_target_word(target_word)  # Set word to recognize
+            target_word = challenge_text.split()[-1]  # Extract the target word from challenge
+            self.speech_recognizer.set_target_word(target_word)  # Set word to listen for
         self.logger.debug(f"New challenge started: {challenge_text}")  # Log new challenge
     
     def process_frame(self, frame):
-        """Process a frame for liveness detection (newer, more detailed approach)."""
-        self.logger.debug("Processing frame in LivenessDetector")
-        # Check if frame is valid
+        """Process a frame for liveness detection (newer approach)."""
+        self.logger.debug("Processing frame in LivenessDetector")  # Log frame processing start
+        # Handle invalid frame input
         if frame is None or frame.size == 0:
-            self.logger.error("Frame is None or empty in process_frame")
+            self.logger.error("Frame is None or empty in process_frame")  # Log error
             return {
-                'display_frame': None,  # No frame to display
-                'debug_frame': None,  # No debug frame
-                'verification_result': 'PENDING',  # Result not determined
+                'display_frame': None,  # No display frame available
+                'debug_frame': None,  # No debug frame available
+                'verification_result': 'PENDING',  # Default result
                 'exit_flag': False,  # Continue processing
                 'challenge_text': None,  # No challenge text
-                'action_completed': False,  # Action not done
+                'action_completed': False,  # Action not completed
                 'word_completed': False,  # Word not spoken
-                'time_remaining': 0,  # No time left
-                'duress_detected': False  # No duress
+                'time_remaining': 0,  # No time remaining
+                'duress_detected': False  # No duress detected
             }
         
-        # Create copies of the frame for display and debug purposes
+        # Create copies of the frame for display and optional debug output
         display_frame = frame.copy()
-        debug_frame = frame.copy()
-        self.logger.debug(f"Frame copied: shape={frame.shape}")
+        debug_frame = frame.copy() if self.config.SHOW_DEBUG_FRAME else None
         
-        # Detect face
+        # Detect face and ROI
         face_roi, face_rect = self.face_detector.detect_face(display_frame)
         
-        head_pose = None  # Initialize head pose as None
+        # Process face detection results
         if face_roi is None:
-            self.logger.debug("No face detected")
-            # Show "No face detected" on both frames
+            self.logger.debug("No face detected")  # Log no face found
             cv2.putText(display_frame, "No face detected", (30, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
-            cv2.putText(debug_frame, "No face detected", (30, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)  # Display error text
+            if debug_frame is not None:
+                cv2.putText(debug_frame, "No face detected", (30, 30),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)  # Debug frame text
+            self.head_pose = "center"  # Reset head pose when no face
+            self.blink_count = 0  # Reset blink count when no face
         else:
-            self.logger.debug(f"Face detected at {face_rect}")
-            # Detect blinks if a face is found
-            blink_count = self.blink_detector.detect_blinks(frame, face_rect, face_roi)
-            self.logger.debug(f"Blink count: {blink_count}")
+            self.logger.debug(f"Face detected at {face_rect}")  # Log face detection
+            self.blink_detector.detect_blinks(frame, face_rect, face_roi)  # Detect blinks
+            self.blink_count = self.blink_detector.blink_counter  # Update blink count
+            self.logger.debug(f"Blink count: {self.blink_count}")  # Log blink count
             
             # Generate debug frame with eye landmarks if enabled
-            if self.config.SHOW_DEBUG_FRAME:
-                self.logger.debug("Generating debug frame with landmarks")
+            if self.config.SHOW_DEBUG_FRAME and debug_frame is not None:
+                self.logger.debug("Generating debug frame with landmarks")  # Log debug frame creation
                 gray_roi = cv2.cvtColor(face_roi, cv2.COLOR_BGR2GRAY)  # Convert ROI to grayscale
-                x, y, w, h = face_rect  # Unpack face rectangle coordinates
-                dlib_rect = dlib.rectangle(0, 0, w, h)  # Create Dlib rectangle
-                landmarks = self.blink_detector.dlib_predictor(gray_roi, dlib_rect)  # Get landmarks
+                x, y, w, h = face_rect  # Unpack face rectangle
+                dlib_rect = dlib.rectangle(0, 0, w, h)  # Create dlib rectangle for landmarks
+                landmarks = self.blink_detector.dlib_predictor(gray_roi, dlib_rect)  # Get facial landmarks
                 
-                # Define left and right eye coordinates
+                # Extract eye landmark coordinates
                 left_eye = [(landmarks.part(i).x + x, landmarks.part(i).y + y) for i in range(36, 42)]
                 right_eye = [(landmarks.part(i).x + x, landmarks.part(i).y + y) for i in range(42, 48)]
                 
@@ -875,7 +880,7 @@ class LivenessDetector:
                 left_ear = self.blink_detector.calculate_ear(np.array(left_eye) - np.array([x, y]))
                 right_ear = self.blink_detector.calculate_ear(np.array(right_eye) - np.array([x, y]))
                 
-                # Position EAR text near each eye
+                # Display EAR values near eyes
                 left_center = np.mean(np.array(left_eye), axis=0).astype(int)
                 right_center = np.mean(np.array(right_eye), axis=0).astype(int)
                 cv2.putText(debug_frame, f"L: {left_ear:.2f}", 
@@ -884,104 +889,115 @@ class LivenessDetector:
                 cv2.putText(debug_frame, f"R: {right_ear:.2f}", 
                             (right_center[0] - 20, right_center[1] - 10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-                self.logger.debug(f"Debug frame generated: EAR L={left_ear:.2f}, R={right_ear:.2f}")
+                self.logger.debug(f"Debug frame generated: EAR L={left_ear:.2f}, R={right_ear:.2f}")  # Log EAR values
         
-        # Detect head pose
-        head_pose = self.action_detector.detect_head_pose(debug_frame, face_rect)
-        self.logger.debug(f"Head pose: {head_pose}")
-        last_speech = self.speech_recognizer.get_last_speech()  # Get last spoken word
+        # Detect head pose and last spoken word
+        self.head_pose = self.action_detector.detect_head_pose(display_frame, face_rect) or "center"  # Update head pose, fallback to "center"
+        self.logger.debug(f"Head pose: {self.head_pose}")  # Log detected pose
+        self.last_speech = self.speech_recognizer.get_last_speech()  # Update last speech
+        self.logger.debug(f"Last speech: {self.last_speech}")  # Log last speech
         
-        # Check for duress word "verify"
-        if last_speech.lower() == "verify":
+        # Check for duress keyword and set flag (actual handling moved to ChallengeManager)
+        if self.last_speech.lower() == "verify":
             self.duress_detected = True
-            self.logger.info("Duress detected: 'verify' spoken")
+            self.logger.info("Duress detected: 'verify' spoken")  # Log duress detection
         
         # Update challenge manager with current detections
-        self.challenge_manager.update(head_pose, self.blink_detector.blink_counter, last_speech)
+        self.challenge_manager.update(self.head_pose, self.blink_count, self.last_speech)
         
-        # Get challenge status
+        # Get current challenge status with updated detection state
         challenge_text, action_completed, word_completed, verification_result = \
-            self.challenge_manager.get_challenge_status()
+            self.challenge_manager.get_challenge_status(self.head_pose, self.blink_count, self.last_speech)
         time_left = self.challenge_manager.get_challenge_time_remaining()
         self.logger.debug(f"Challenge status: text={challenge_text}, action={action_completed}, "
-                         f"word={word_completed}, result={verification_result}, time={time_left:.1f}s")
+                         f"word={word_completed}, result={verification_result}, time={time_left:.1f}s")  # Log status
         
-        # Synchronize action and word verification
-        if word_completed and challenge_text:
-            target_action = challenge_text.split()[1].lower()  # Extract action (e.g., "up")
-            action_completed = (head_pose == target_action)  # Check if current pose matches
-            self.logger.debug(f"Word spoken, verifying action: expected={target_action}, detected={head_pose}")
-            self.challenge_manager.action_completed = action_completed  # Update challenge manager
+        final_result = 'PENDING'  # Default verification result
+        exit_flag = False  # Default flag to continue processing
         
-        final_result = 'PENDING'  # Default result
-        exit_flag = False  # Default to continue processing
-        
-        # Process verification result if challenge is complete
-        if verification_result != "PENDING":
-            last_speech = self.speech_recognizer.get_last_speech()
-            # Display speech and blink info on debug frame
-            cv2.putText(debug_frame, f"Speech: {last_speech}", (10, 150),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-            cv2.putText(debug_frame, f"Blinks: {self.blink_detector.blink_counter}", (10, 180),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        # Process final verification outcome
+        if verification_result in ["PASS", "FAIL"]:
+            if debug_frame is not None:
+                # Display speech and blink info on debug frame
+                cv2.putText(debug_frame, f"Speech: {self.last_speech}", (10, 150),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                cv2.putText(debug_frame, f"Blinks: {self.blink_count}", (10, 180),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             
             # Handle duress detection
             if self.duress_detected:
                 self.status = "UNDER DURESS DETECTED"
-                cv2.putText(debug_frame, "DURESS DETECTED", (20, display_frame.shape[0]-20),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (239, 234, 79), 2)  # Yellow text
+                cv2.putText(debug_frame if debug_frame is not None else display_frame,
+                            "DURESS DETECTED", (20, display_frame.shape[0]-20),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (239, 234, 79), 2)  # Yellow text for duress
                 final_result = 'FAIL'
                 exit_flag = True
-            # Handle pass result
+            # Handle successful verification
             elif verification_result == "PASS":
                 self.status = "VERIFICATION PASSED"
-                cv2.putText(debug_frame, "VERIFICATION PASSED", (20, display_frame.shape[0]-20),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)  # Green text
+                cv2.putText(debug_frame if debug_frame is not None else display_frame,
+                            "VERIFICATION PASSED", (20, display_frame.shape[0]-20),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)  # Green text for pass
                 final_result = 'PASS'
                 exit_flag = True
-            # Handle fail result
+            # Handle failed verification (including timeout)
             elif verification_result == "FAIL":
                 self.status = "VERIFICATION FAILED"
-                cv2.putText(debug_frame, "VERIFICATION FAILED", (20, display_frame.shape[0]-20),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)  # Red text
+                cv2.putText(debug_frame if debug_frame is not None else display_frame,
+                            "VERIFICATION FAILED", (20, display_frame.shape[0]-20),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)  # Red text for fail
                 final_result = 'FAIL'
                 exit_flag = True
-            self.logger.debug(f"Verification result: {final_result}")
+            self.logger.debug(f"Verification result: {final_result}")  # Log result
         else:
             # Start a new challenge if none is active
             if not challenge_text:
                 self.start_challenge()
                 challenge_text, action_completed, word_completed, verification_result = \
-                    self.challenge_manager.get_challenge_status()
+                    self.challenge_manager.get_challenge_status(self.head_pose, self.blink_count, self.last_speech)
                 time_left = self.challenge_manager.get_challenge_time_remaining()
-                self.logger.debug("Issued new challenge due to none active")
+                self.logger.debug("Issued new challenge due to none active")  # Log new challenge
         
-        # Draw face info on display frame
+        # Draw face info on both frames
         self.face_detector.draw_face_info(display_frame, face_rect, self.status, self.liveness_score)
-        cv2.putText(display_frame, f"Speech: {self.speech_recognizer.get_last_speech()}",
+        cv2.putText(display_frame, f"Speech: {self.last_speech}",
                     (10, display_frame.shape[0] - 20),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)  # Display last speech
+        if self.config.SHOW_DEBUG_FRAME and debug_frame is not None:
+            self.face_detector.draw_face_info(debug_frame, face_rect, self.status, self.liveness_score)
+        
+        # Overlay additional info on both frames
+        cv2.putText(display_frame, f"Head Pose: {self.head_pose if self.head_pose else 'None'}", (10, 210),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        cv2.putText(display_frame, f"Challenge: {challenge_text}", (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        cv2.putText(display_frame, f"Action completed: {action_completed}", (10, 60),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        cv2.putText(display_frame, f"Word completed: {word_completed}", (10, 90),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        cv2.putText(display_frame, f"Time left: {time_left:.1f}s", (10, 120),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
-        # Add debug info to debug frame
-        cv2.putText(debug_frame, f"Head Pose: {head_pose if head_pose else 'None'}", (10, 210),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        cv2.putText(debug_frame, f"Challenge: {challenge_text}", (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        cv2.putText(debug_frame, f"Action completed: {action_completed}", (10, 60),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        cv2.putText(debug_frame, f"Word completed: {word_completed}", (10, 90),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        cv2.putText(debug_frame, f"Time left: {time_left:.1f}s", (10, 120),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        if debug_frame is not None:
+            cv2.putText(debug_frame, f"Head Pose: {self.head_pose if self.head_pose else 'None'}", (10, 210),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            cv2.putText(debug_frame, f"Challenge: {challenge_text}", (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            cv2.putText(debug_frame, f"Action completed: {action_completed}", (10, 60),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            cv2.putText(debug_frame, f"Word completed: {word_completed}", (10, 90),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+            cv2.putText(debug_frame, f"Time left: {time_left:.1f}s", (10, 120),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
         # Update liveness score based on challenge completion
         if action_completed and word_completed:
-            self.liveness_score = 1.0  # Full score if both are complete
+            self.liveness_score = 1.0
         else:
-            self.liveness_score = 0.0  # Zero if either is incomplete
+            self.liveness_score = 0.0
         
-        self.logger.debug("Frame processing completed")
-        # Return all processed data
+        self.logger.debug("Frame processing completed")  # Log completion
+        # Return comprehensive result dictionary
         return {
             'display_frame': display_frame,
             'debug_frame': debug_frame,
@@ -1069,16 +1085,18 @@ if __name__ == "__main__":
 
 """Speech recognition module for challenge verification using PocketSphinx."""
 
-import speech_recognition as sr
 import threading
 import time
 import logging
 import tempfile
+import io
+from queue import Queue
+from pocketsphinx import Pocketsphinx
+from pydub import AudioSegment
 from config import Config
-from pocketsphinx import LiveSpeech
 
 class SpeechRecognizer:
-    """Handles real-time speech recognition for challenge verification using PocketSphinx."""
+    """Handles real-time speech recognition for challenge verification using audio from the browser."""
     
     def __init__(self, config: Config):
         self.config = config
@@ -1088,471 +1106,718 @@ class SpeechRecognizer:
         self.speech_lock = threading.Lock()
         self.last_speech_time = 0
         self.running = False
-        self.speech_thread = None
-        self.speech_ready = False
-        self.target_word = ""  # default target word is empty
+        self.audio_queue = Queue()  # Thread-safe queue for audio chunks
+        self.target_word = ""
+        self.audio_buffer = bytearray()  # Buffer to accumulate WebM chunks
         
+        # Initialize PocketSphinx with corrected parameters
         try:
-            self.logger.info("Initializing PocketSphinx...")
+            self.logger.info("Initializing PocketSphinx for browser audio...")
             keywords = config.SPEECH_KEYWORDS
             self.keyword_file = tempfile.NamedTemporaryFile(mode='w', delete=False).name
             with open(self.keyword_file, "w") as f:
                 for kw in keywords:
-                    f.write(kw + "\n")
-            
-            self.logger.info(f"Keyword file: {self.keyword_file}")
-            
-            self.microphone = sr.Microphone()
-            with self.microphone as source:
-                self.logger.info("Calibrating microphone for ambient noise (0.5s)...")
-                sr.Recognizer().adjust_for_ambient_noise(source, duration=0.5)
-            
-            self.speech = LiveSpeech(
-                verbose=False,
-                sampling_rate=config.SPEECH_SAMPLING_RATE,
-                buffer_size=config.SPEECH_BUFFER_SIZE,
-                no_search=False,
-                full_utt=False,
-                kws=self.keyword_file
-            )
+                    f.write(f"{kw}\n")  # Simplified sensitivity for testing
+            self.decoder_config = {
+                'verbose': False,
+                'hmm': '/usr/share/pocketsphinx/model/en-us/en-us',  # Default acoustic model (adjust path if needed)
+                'lm': '/usr/share/pocketsphinx/model/en-us/en-us.lm.bin',  # Default language model
+                'dict': '/usr/share/pocketsphinx/model/en-us/cmudict-en-us.dict',  # Default dictionary
+                'kws': self.keyword_file,  # Keyword spotting file
+                'samprate': config.SPEECH_SAMPLING_RATE,  # Correct key for sample rate
+                'buffer_size': config.SPEECH_BUFFER_SIZE
+            }
+            self.decoder = Pocketsphinx(**self.decoder_config)
             self.speech_ready = True
-            self.logger.info("PocketSphinx ready.")
-        except ImportError:
-            self.logger.error("Could not import pocketsphinx. Please install via pip")
-            self.speech_ready = False
+            self.logger.info("PocketSphinx initialized successfully.")
         except Exception as e:
-            self.logger.error(f"Error initializing pocketsphinx: {e}")
+            self.logger.error(f"Error initializing PocketSphinx: {e}")
             self.speech_ready = False
+
+        # Start processing thread if ready
+        if self.speech_ready:
+            self.start_processing()
 
     def set_target_word(self, word: str) -> None:
+        """Set the target word to detect."""
         self.target_word = word.lower().strip()
         self.logger.info(f"Target word set to: {self.target_word}")
-    
-    def listen_for_speech(self) -> None:
-        if not self.speech_ready:
-            self.logger.warning("Speech recognition not available")
-            return
-        
-        self.logger.info("Speech recognition thread started")
-        self.running = True
-        last_detected_word = None
-        last_time = 0
-        
-        try:
-            for phrase in self.speech:
-                if not self.running:
-                    break
-                text = str(phrase).lower()
-                now = time.time()
-                
-                # If a target word is set, check if it appears in the phrase.
-                if self.target_word and self.target_word in text:
-                    with self.speech_lock:
-                        self.last_speech = self.target_word
-                        self.last_speech_time = now
-                    self.logger.info(f"Target word recognized: {self.target_word}")
-                    continue
 
-                # Otherwise, process recognized keywords.
-                possible_keywords = ["blue", "red", "sky", "ground", "hello", "verify", "noise"]
-                first_word = None
-                for k in possible_keywords:
-                    if k in text:
-                        first_word = k
-                        break
-                if first_word:
-                    if first_word == "noise":
-                        with self.speech_lock:
-                            self.last_speech = ""
-                            self.last_speech_time = now
-                        last_detected_word = first_word
-                        last_time = now
-                        self.logger.debug("Detected 'noise' => ignoring")
-                    else:
-                        # Avoid spamming if the same word repeats in <1s
-                        if (first_word != last_detected_word) or ((now - last_time) > 1.0):
-                            with self.speech_lock:
-                                self.last_speech = first_word
-                                self.last_speech_time = now
-                            self.logger.info(f"Recognized: {first_word} (full: '{text}')")
-                            last_detected_word = first_word
-                            last_time = now
-                else:
-                    self.logger.debug(f"No recognized keyword in '{text}'")
-        except Exception as e:
-            self.logger.error(f"Error in speech recognition: {e}")
-        finally:
-            self.running = False
-            self.logger.info("Speech recognition thread ended")
-    
-    def start_listening(self) -> None:
+    def add_audio_chunk(self, audio_data: bytes) -> None:
+        """Add an audio chunk received from the browser."""
         if not self.speech_ready:
-            self.logger.warning("Speech not available")
+            self.logger.warning("Speech recognizer not ready, ignoring audio chunk.")
             return
-        if not self.running and (self.speech_thread is None or not self.speech_thread.is_alive()):
-            self.speech_thread = threading.Thread(target=self.listen_for_speech, daemon=True)
-            self.speech_thread.start()
-    
+        self.audio_queue.put(audio_data)
+        self.logger.debug(f"Added audio chunk, queue size: {self.audio_queue.qsize()}")
+
+    def process_audio(self) -> None:
+        """Process audio chunks in a separate thread with improved buffering."""
+        self.running = True
+        self.logger.info("Audio processing thread started.")
+        
+        while self.running:
+            if self.audio_queue.empty():
+                time.sleep(0.01)  # Avoid busy-waiting
+                continue
+            
+            # Accumulate chunks into buffer
+            audio_data = self.audio_queue.get()
+            self.audio_buffer.extend(audio_data)
+            self.logger.debug(f"Added chunk to buffer, size: {len(self.audio_buffer)} bytes")
+
+            # Process buffer when it contains at least 5 seconds of audio (assuming 16kHz Opus, ~160KB)
+            if len(self.audio_buffer) >= 160000:
+                try:
+                    # Convert buffered WebM to PCM
+                    self.logger.debug("Attempting to convert WebM buffer to PCM...")
+                    audio_segment = AudioSegment.from_file(
+                        io.BytesIO(self.audio_buffer), format="webm"
+                    )
+                    audio_segment = audio_segment.set_frame_rate(self.config.SPEECH_SAMPLING_RATE)\
+                                                .set_channels(1)\
+                                                .set_sample_width(2)  # 16-bit PCM
+                    raw_audio = audio_segment.raw_data
+                    self.logger.debug(f"Converted buffer to PCM: {len(raw_audio)} bytes, "
+                                     f"sample_rate={audio_segment.frame_rate}, "
+                                     f"channels={audio_segment.channels}")
+
+                    # Process with PocketSphinx
+                    self.decoder.start_utt()
+                    self.decoder.process_raw(raw_audio, no_search=False, full_utt=True)
+                    self.decoder.end_utt()
+                    hypothesis = self.decoder.hypothesis()
+
+                    if hypothesis:
+                        text = hypothesis.lower()
+                        self.logger.debug(f"Raw hypothesis: {text}")
+                        now = time.time()
+                        if self.target_word and self.target_word in text:
+                            with self.speech_lock:
+                                self.last_speech = self.target_word
+                                self.last_speech_time = now
+                            self.logger.info(f"Target word recognized: {self.target_word}")
+                        else:
+                            possible_keywords = ["clock", "book", "jump", "fish", "wind", "verify", "noise"]
+                            for k in possible_keywords:
+                                if k in text:
+                                    with self.speech_lock:
+                                        self.last_speech = k if k != "noise" else ""
+                                        self.last_speech_time = now
+                                    self.logger.info(f"Recognized keyword: {k}")
+                                    break
+                    else:
+                        self.logger.debug("No speech recognized in this buffer.")
+
+                    # Clear buffer after processing
+                    self.audio_buffer = bytearray()
+
+                except Exception as e:
+                    self.logger.error(f"Error processing audio buffer: {str(e)}", exc_info=True)
+                    self.audio_buffer = bytearray()  # Reset buffer on error to avoid accumulation
+            
+            self.audio_queue.task_done()
+
+        self.logger.info("Audio processing thread ended.")
+
+    def start_processing(self) -> None:
+        """Start the audio processing thread."""
+        if not self.speech_ready or self.running:
+            self.logger.warning("Processing already started or speech not ready.")
+            return
+        self.speech_thread = threading.Thread(target=self.process_audio, daemon=True)
+        self.speech_thread.start()
+
     def stop(self) -> None:
+        """Stop the processing thread cleanly."""
         self.running = False
-        if self.speech_thread and self.speech_thread.is_alive():
-            self.logger.info("Stopping speech thread...")
+        if hasattr(self, 'speech_thread') and self.speech_thread.is_alive():
             self.speech_thread.join(timeout=1.0)
-    
+        self.logger.info("Speech processing stopped.")
+
     def get_last_speech(self) -> str:
+        """Return the last recognized speech."""
         with self.speech_lock:
             return self.last_speech
-    
+
     def get_last_speech_time(self) -> float:
+        """Return the timestamp of the last recognized speech."""
         with self.speech_lock:
             return self.last_speech_time
-    
+
     def reset(self) -> None:
+        """Reset the recognizer state."""
         with self.speech_lock:
             self.last_speech = ""
             self.last_speech_time = 0
-
+            self.audio_buffer = bytearray()
+            while not self.audio_queue.empty():
+                try:
+                    self.audio_queue.get_nowait()
+                    self.audio_queue.task_done()
+                except Exception:
+                    break
 
 
 ===== web_app.py =====
 
 """Web application for liveness detection."""
 
-import os
-import cv2
-import base64
-import numpy as np
-import logging
-import random
-import string
-import qrcode
-from flask import Flask, render_template, request, jsonify
-from flask_socketio import SocketIO, emit, join_room, leave_room
-import threading
-import time
-from typing import Dict, Any
+# Import standard Python libraries for various functionalities
+import os  # Handles file system operations like creating directories or removing files
+import cv2  # OpenCV library for computer vision tasks, such as image encoding/decoding
+import base64  # For encoding binary data (like images) to base64 strings and vice versa
+import numpy as np  # Provides numerical operations and array manipulation for image data
+import logging  # Enables logging of debug, info, and error messages for troubleshooting
+import random  # Used to generate random numbers or selections (e.g., for verification codes)
+import string  # Provides string utilities, like digits for generating random codes
+import qrcode  # Library to generate QR codes for verification URLs
+from flask import Flask, render_template, request, jsonify  # Flask components: app creation, template rendering, HTTP requests, and JSON responses
+from flask_socketio import SocketIO, emit, join_room, leave_room  # SocketIO for real-time WebSocket communication between server and clients
+import threading  # Allows running background tasks, like cleanup or expiration timers
+import time  # Provides time-related functions, such as timestamps and delays
+from typing import Dict, Any  # Type hints to clarify dictionary structures and improve code readability
 
-from config import Config
-from liveness_detector import LivenessDetector
+# Import custom project modules
+from config import Config  # Loads configuration settings (e.g., timeouts, debug mode) from config.py
+from liveness_detector import LivenessDetector  # Main class for liveness detection logic (face, blink, speech, etc.)
 
-app = Flask(__name__, 
-            static_folder='static',
-            template_folder='templates')
-app.config['SECRET_KEY'] = 'liveness-detection-secret'
-socketio = SocketIO(app, cors_allowed_origins="*")
+# Create Flask application instance
+app = Flask(__name__,
+            static_folder='static',  # Directory where static files (CSS, JS, images) are served from
+            template_folder='templates')  # Directory containing HTML templates for rendering
+app.config['SECRET_KEY'] = 'liveness-detection-secret'  # Secret key for securing Flask sessions and CSRF protection
 
+# Initialize SocketIO for real-time communication, allowing connections from any origin
+socketio = SocketIO(app, cors_allowed_origins="*")  # "*" allows all domains; adjust for production security
+
+# Instantiate configuration object to access settings
 config = Config()
 
-logging_level = logging.DEBUG if config.DEBUG else logging.INFO
+# Configure logging based on debug mode from config
+logging_level = logging.DEBUG if config.DEBUG else logging.INFO  # DEBUG logs more details, INFO is less verbose
 logging.basicConfig(
-    level=logging_level,
-    format=config.LOGGING_FORMAT
+    level=logging_level,  # Set the logging level to control verbosity
+    format=config.LOGGING_FORMAT  # Use the log format defined in config (e.g., timestamp, level, message)
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)  # Create a logger specific to this module (web_app.py)
 
-active_sessions: Dict[str, Dict[str, Any]] = {}
-verification_codes: Dict[str, Dict[str, Any]] = {}
-last_log_time = {}
+# Define global dictionaries to manage application state
+active_sessions: Dict[str, Dict[str, Any]] = {}  # Tracks active client sessions by session ID; each session has a detector, code, etc.
+verification_codes: Dict[str, Dict[str, Any]] = {}  # Stores verification codes with their status, requester ID, and creation time
+last_log_time = {}  # Keeps track of the last time a debug log was emitted per session, for rate-limiting
 
+# Define route for the root URL (homepage)
 @app.route('/')
 def index():
+    # Render the landing page template (index.html) when users visit "/"
     return render_template('index.html')
 
+# Route to verify the code and render a page if it's valid
 @app.route('/verify/<code>')
 def verify(code):
-    logger.debug(f"Verify route called with code: {code}")
-    if code not in verification_codes:
-        return render_template('error.html', 
-                               message="Invalid verification code", 
-                               redirect_url="/")
+    # Check if the code is exactly 6 digits
+    if not code.isdigit() or len(code) != 6:
+        # If not, show error with redirect
+        return render_template('error.html', message="Invalid code format", redirect_url="/")
+
+    # Check if the code exists and is still in 'pending' state
+    if code not in verification_codes or verification_codes[code]['status'] != 'pending':
+        # If not valid or already used/expired, show error
+        return render_template('error.html', message="Invalid or expired verification code", redirect_url="/")
+
+    # If everything checks out, render the verification page
     return render_template('verify.html', session_code=code)
 
+# Define route to check if a verification code is valid via HTTP GET
 @app.route('/check_code/<code>')
 def check_code(code):
+    # Log the code check attempt for debugging
     logger.debug(f"Check code route called with code: {code}")
-    is_valid = code in verification_codes
+    # Check if the code exists in verification_codes and is still pending
+    is_valid = code in verification_codes and verification_codes[code]['status'] == 'pending'
+    # Return a JSON response indicating whether the code is valid
     return jsonify({'valid': is_valid})
 
+# Function to clean up a session and its resources when it ends or times out
+def cleanup_session(session_id: str, code: str = None):
+    """Clean up a session and its associated QR code."""
+    # Check if the session exists in active_sessions
+    if session_id in active_sessions:
+        session_data = active_sessions[session_id]  # Retrieve the session’s data
+        # If the session has a detector, stop its speech recognizer to free resources
+        if session_data['detector'] is not None:
+            session_data['detector'].speech_recognizer.stop()
+        # Use provided code or extract it from session data if not provided
+        code = code or session_data.get('code')
+        # If a code exists and is in verification_codes, clean up associated resources
+        if code and code in verification_codes:
+            qr_path = f"static/qr_codes/{code}.png"  # Path to the QR code image file
+            # Remove the QR code file if it exists on disk
+            if os.path.exists(qr_path):
+                os.remove(qr_path)
+                logger.info(f"Deleted QR code for session {session_id}: {code}")
+            # Update the code’s status to 'completed' and remove it from tracking
+            verification_codes[code]['status'] = 'completed'
+            del verification_codes[code]
+        # Remove the session from active_sessions
+        del active_sessions[session_id]
+        # Log that the cleanup was completed
+        logger.info(f"Cleaned up session {session_id} with code {code}")
+
+# SocketIO event handler triggered when a client connects
 @socketio.on('connect')
 def handle_connect():
-    session_id = request.sid
+    session_id = request.sid  # Get the unique session ID assigned by Flask-SocketIO
+    # Log the connection event with the session ID
     logger.info(f"Client connected: {session_id}")
 
+# SocketIO event handler triggered when a client disconnects
 @socketio.on('disconnect')
 def handle_disconnect():
-    session_id = request.sid
+    session_id = request.sid  # Get the session ID of the disconnecting client
     logger.info(f"Client disconnected: {session_id}")
-    if session_id in active_sessions:
-        if active_sessions[session_id]['detector'] is not None:
-            active_sessions[session_id]['detector'].speech_recognizer.stop()
-        del active_sessions[session_id]
+    # Clean up the session to free resources and remove tracking
+    cleanup_session(session_id)
 
+# SocketIO event handler for receiving video frames (older method, using detect_liveness)
 @socketio.on('frame')
 def handle_frame(data):
-    session_id = request.sid
+    session_id = request.sid  # Get the session ID of the client sending the frame
+    # Verify the session exists
     if session_id not in active_sessions:
         logger.warning(f"Received frame from unknown session: {session_id}")
-        return
+        return  # Exit if session isn’t recognized
     
+    # Check if the session has exceeded the maximum allowed attempts (3)
     if active_sessions[session_id].get('attempts', 0) >= 3:
-        emit('max_attempts_reached')
+        emit('max_attempts_reached')  # Notify client they’ve hit the limit
+        cleanup_session(session_id)  # Clean up the session
         return
     
+    # Update the session’s last activity timestamp to track inactivity
     active_sessions[session_id]['last_activity'] = time.time()
     
     try:
+        # Extract the base64-encoded image data from the incoming data, skipping the data URI prefix
         image_data = data['image'].split(',')[1]
+        # Decode the base64 string into binary data
         image_bytes = base64.b64decode(image_data)
+        # Convert binary data into a NumPy array for OpenCV processing
         image_array = np.frombuffer(image_bytes, np.uint8)
+        # Decode the array into an image frame using OpenCV
         frame = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
         
+        # Get the liveness detector instance for this session
         detector = active_sessions[session_id]['detector']
+        # Process the frame for liveness detection (older method)
         display_frame, exit_flag = detector.detect_liveness(frame)
         
-        challenge_text, action_completed, word_completed, verification_result = \
-            detector.challenge_manager.get_challenge_status()
+        # Extract detection data for challenge status
+        head_pose = detector.head_pose  # Current head pose from detector state
+        blink_counter = detector.blink_count  # Current blink count from detector state
+        last_speech = detector.last_speech or ""  # Current speech, default to empty string if None
         
+        # Retrieve the current challenge status with detection data
+        challenge_text, action_completed, word_completed, verification_result = \
+            detector.challenge_manager.get_challenge_status(head_pose, blink_counter, last_speech)
+        
+        # Encode the processed display frame back to JPEG format
         _, buffer = cv2.imencode('.jpg', display_frame)
+        # Convert the JPEG binary data to a base64 string for transmission
         encoded_frame = base64.b64encode(buffer).decode('utf-8')
         
+        # Send the processed frame and challenge status back to the client
         emit('processed_frame', {
-            'image': f'data:image/jpeg;base64,{encoded_frame}',
-            'challenge': challenge_text,
-            'action_completed': action_completed,
-            'word_completed': word_completed,
-            'time_remaining': detector.challenge_manager.get_challenge_time_remaining(),
-            'verification_result': verification_result,
-            'exit_flag': exit_flag
+            'image': f'data:image/jpeg;base64,{encoded_frame}',  # Base64-encoded image with data URI prefix
+            'challenge': challenge_text,  # Current challenge text (e.g., "Turn left and say blue")
+            'action_completed': action_completed,  # Whether the action part is done
+            'word_completed': word_completed,  # Whether the speech part is done
+            'time_remaining': detector.challenge_manager.get_challenge_time_remaining(),  # Time left for challenge
+            'verification_result': verification_result,  # Result: 'PASS', 'FAIL', or None
+            'exit_flag': exit_flag  # Whether to stop processing (True if challenge is complete)
         })
         
-        if exit_flag:
+        # If the challenge is complete and has a definitive result
+        if exit_flag and verification_result in ['PASS', 'FAIL']:
+            # Increment the attempt counter for this session
             active_sessions[session_id]['attempts'] = active_sessions[session_id].get('attempts', 0) + 1
-            
+            # If the challenge passed or max attempts reached, clean up the session
+            if verification_result == 'PASS' or active_sessions[session_id]['attempts'] >= 3:
+                cleanup_session(session_id)
+    
     except Exception as e:
+        # Log any errors that occur during frame processing
         logger.error(f"Error processing frame: {e}")
+        # Notify the client of the error
         emit('error', {'message': str(e)})
 
+# SocketIO event handler for resetting a verification session
 @socketio.on('reset')
 def handle_reset(data):
-    session_id = request.sid
-    code = data.get('code')
+    session_id = request.sid  # Get the session ID of the client requesting reset
+    code = data.get('code')  # Extract the verification code from the data
     
+    # Check if the session exists
     if session_id not in active_sessions:
         logger.warning(f"Reset request from unknown session: {session_id}")
         return
     
     try:
+        # Get the detector instance and reset its state (e.g., new challenge)
         detector = active_sessions[session_id]['detector']
         detector.reset()
-        logger.info(f"Reset detector for session {session_id}, new challenge issued")
+        # Increment the attempt counter
+        active_sessions[session_id]['attempts'] = active_sessions[session_id].get('attempts', 0) + 1
+        # Log the reset action with the new attempt number
+        logger.info(f"Reset detector for session {session_id}, new challenge issued, attempt {active_sessions[session_id]['attempts']}")
+        # Confirm the reset to the client
         emit('reset_confirmed')
     except Exception as e:
+        # Log any errors during reset
         logger.error(f"Error resetting verification: {e}")
+        # Notify the client of the error
         emit('error', {'message': str(e)})
 
+# SocketIO event handler to provide debug status to clients
 @socketio.on('get_debug_status')
 def handle_get_debug_status():
+    # Log the debug status request with current config values
     logger.debug(f"Debug status requested: debug={config.DEBUG}, showDebugFrame={config.SHOW_DEBUG_FRAME}")
+    # Send the debug configuration to the client
     emit('debug_status', {
-        'debug': config.DEBUG,
-        'showDebugFrame': config.SHOW_DEBUG_FRAME
+        'debug': config.DEBUG,  # Whether debug mode is enabled
+        'showDebugFrame': config.SHOW_DEBUG_FRAME  # Whether to show debug frames with landmarks
     })
 
+# SocketIO event handler to generate a new verification code
 @socketio.on('generate_code')
 def handle_generate_code():
-    session_id = request.sid
+    session_id = request.sid  # Get the session ID of the requesting client
     logger.info(f"Generate code request from session {session_id}")
     
+    # Generate a random 6-digit code using digits 0-9
     code = ''.join(random.choices(string.digits, k=6))
+    # Construct the verification URL using the base URL from config
     verification_url = f"{config.BASE_URL}/verify/{code}"
+    # Create a QR code object with specified settings
     qr = qrcode.QRCode(version=1, box_size=10, border=5)
-    qr.add_data(verification_url)
-    qr.make(fit=True)
+    qr.add_data(verification_url)  # Add the URL to the QR code
+    qr.make(fit=True)  # Generate the QR code to fit the data
+    # Create a black-and-white QR code image
     qr_img = qr.make_image(fill='black', back_color='white')
-    qr_img.save(f"static/qr_codes/{code}.png")
-    qr_path = f"/static/qr_codes/{code}.png"
+    qr_path = f"static/qr_codes/{code}.png"  # Define the file path for the QR code image
+    qr_img.save(qr_path)  # Save the QR code image to disk
     
+    # Store the verification code details in the global dictionary
     verification_codes[code] = {
-        'requester_id': session_id,
-        'created_at': time.time(),
-        'status': 'pending'
+        'requester_id': session_id,  # ID of the client requesting the code
+        'created_at': time.time(),  # Timestamp of code creation
+        'status': 'pending'  # Initial status of the code
     }
     
+    # Log that the code and QR code are being sent to the client
     logger.info(f"Emitting verification code {code} with QR code to session {session_id}")
-    emit('verification_code', {'code': code, 'qr_code': qr_path})
+    # Send the code and QR code path to the client
+    emit('verification_code', {'code': code, 'qr_code': f"/static/qr_codes/{code}.png"})
     
+    # Define a function to expire the code after 10 minutes
     def expire_code():
-        time.sleep(600)
+        time.sleep(600)  # Wait 10 minutes (600 seconds)
+        # Check if the code still exists and is pending
         if code in verification_codes and verification_codes[code]['status'] == 'pending':
+            qr_path = f"static/qr_codes/{code}.png"
+            # Remove the QR code file if it exists
+            if os.path.exists(qr_path):
+                os.remove(qr_path)
+                logger.info(f"Deleted QR code for expired code: {code}")
+            # Remove the code from tracking
             del verification_codes[code]
-            if os.path.exists(f"static/qr_codes/{code}.png"):
-                os.remove(f"static/qr_codes/{code}.png")
             logger.info(f"Expired verification code {code}")
     
+    # Start a background thread to handle code expiration
     expiration_thread = threading.Thread(target=expire_code)
-    expiration_thread.daemon = True
-    expiration_thread.start()
+    expiration_thread.daemon = True  # Thread will terminate when main program exits
+    expiration_thread.start()  # Start the expiration timer
 
+# Background function to periodically clean up inactive sessions
 def cleanup_inactive_sessions():
-    while True:
-        current_time = time.time()
-        inactive_sessions = []
+    while True:  # Run indefinitely
+        current_time = time.time()  # Get the current timestamp
+        inactive_sessions = []  # List to store IDs of sessions to clean up
         
+        # Check each session for inactivity
         for session_id, session_data in active_sessions.items():
-            if current_time - session_data['last_activity'] > 300:
+            # If the session has been inactive longer than the timeout
+            if current_time - session_data['last_activity'] > config.SESSION_TIMEOUT:
                 inactive_sessions.append(session_id)
         
+        # Clean up all identified inactive sessions
         for session_id in inactive_sessions:
-            logger.info(f"Cleaning up inactive session: {session_id}")
-            if active_sessions[session_id]['detector'] is not None:
-                active_sessions[session_id]['detector'].speech_recognizer.stop()
-            del active_sessions[session_id]
+            cleanup_session(session_id)
         
-        time.sleep(60)
+        time.sleep(10)  # Wait 10 seconds before the next check
 
+# SocketIO event handler for a client joining a verification session
 @socketio.on('join_verification')
 def handle_join_verification(data):
-    session_id = request.sid
-    code = data.get('code')
+    session_id = request.sid  # Get the session ID of the joining client
+    code = data.get('code')  # Extract the verification code from the data
     
+    # Log the join attempt
     logger.info(f"Client {session_id} joining verification session with code: {code}")
-    if not code or code not in verification_codes:
-        emit('session_error', {'message': 'Invalid verification code'})
+    # Validate the code: must exist, be non-empty, and still pending
+    if not code or code not in verification_codes or verification_codes[code]['status'] != 'pending':
+        # If invalid, notify the client with an error message
+        emit('session_error', {'message': 'Invalid or expired verification code'})
         return
     
-    if verification_codes[code]['status'] == 'in-progress':
-        emit('session_error', {'message': 'This verification session is already in progress'})
-        return
-    
+    # Update the code’s status to indicate verification is in progress
     verification_codes[code]['status'] = 'in-progress'
+    # Store the verifier’s session ID
     verification_codes[code]['verifier_id'] = session_id
     
+    # Initialize the session data in active_sessions
     active_sessions[session_id] = {
-        'code': code,
-        'detector': None,
-        'last_activity': time.time(),
-        'attempts': 0
+        'code': code,  # Associate the code with this session
+        'detector': None,  # Placeholder for the liveness detector
+        'last_activity': time.time(),  # Set initial activity timestamp
+        'attempts': 0  # Initialize attempt counter
     }
     
+    # Create a new liveness detector instance for this session
     detector = LivenessDetector(config)
-    active_sessions[session_id]['detector'] = detector
+    active_sessions[session_id]['detector'] = detector  # Store the detector in session data
     
-    join_room(code)
-    requester_id = verification_codes[code]['requester_id']
+    join_room(code)  # Add the client to a SocketIO room named after the code
+    requester_id = verification_codes[code]['requester_id']  # Get the ID of the original requester
+    # Notify the requester that verification has started
     emit('verification_started', {'code': code}, room=requester_id)
     
-    challenge_text, _, _, _ = detector.challenge_manager.get_challenge_status()
+    # Get the initial challenge text from the detector with initial state
+    challenge_text, _, _, _ = detector.challenge_manager.get_challenge_status(
+        detector.head_pose, detector.blink_count, detector.last_speech or ""
+    )
     emit('challenge', {'text': challenge_text})
 
+# SocketIO event handler for processing video frames (newer method, using process_frame)
 @socketio.on('process_frame')
 def handle_process_frame(data):
-    session_id = request.sid
-    code = data.get('code')
+    session_id = request.sid  # Get the session ID of the client sending the frame
+    code = data.get('code')  # Extract the verification code from the data
     
-    current_time = time.time()
+    current_time = time.time()  # Get the current timestamp
+    # Rate-limit debug logging to once per second per session
     if config.DEBUG and (session_id not in last_log_time or current_time - last_log_time.get(session_id, 0) >= 1.0):
         logger.debug(f"Processing frame for session {session_id}, code {code}")
-        last_log_time[session_id] = current_time
+        last_log_time[session_id] = current_time  # Update last log time
     
-    if session_id not in active_sessions:
-        logger.warning(f"Received frame from unknown session: {session_id}")
-        emit('session_error', {'message': 'Invalid session'})
+    # Validate that the session exists and matches the code
+    if session_id not in active_sessions or active_sessions[session_id]['code'] != code:
+        logger.warning(f"Received frame from unknown or invalid session: {session_id}, code: {code}")
+        emit('session_error', {'message': 'Invalid session or code'})
         return
     
+    # Check if the session has exceeded max attempts
+    if active_sessions[session_id].get('attempts', 0) >= 3:
+        emit('max_attempts_reached')  # Notify client of limit reached
+        cleanup_session(session_id, code)  # Clean up the session
+        return
+    
+    # Update the session’s last activity timestamp
     active_sessions[session_id]['last_activity'] = time.time()
     
+    # Extract and decode the frame
     try:
-        image_data = data['image'].split(',')[1]
-        image_bytes = base64.b64decode(image_data)
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        logger.debug(f"Frame decoded: shape={frame.shape if frame is not None else 'None'}")
+        image_data = data['image'].split(',')[1]  # Remove data URI prefix
+        image_bytes = base64.b64decode(image_data)  # Convert base64 to binary
+    except Exception as e:
+        logger.error(f"Failed to decode base64 image data: {e}")
+        emit('error', {'message': 'Invalid image data'})
+        return
+    
+    # Check if the frame data is empty upfront
+    nparr = np.frombuffer(image_bytes, np.uint8)
+    if nparr.size == 0:
+        logger.debug("Received empty frame buffer; waiting for next frame")
+        emit('waiting_for_camera', {'message': 'Camera not ready yet'})
+        return
+    
+    # Decode with limited retries
+    frame = None
+    max_retries = 10  # Reduced from 50: 1 second total
+    retry_delay = 0.1  # 0.1s delay between retries
+    for attempt in range(max_retries):
+        try:
+            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)  # Decode into an OpenCV image
+            if frame is None:
+                logger.debug(f"Failed to decode frame on attempt {attempt + 1}/{max_retries}")
+                time.sleep(retry_delay)
+                continue
+            
+            logger.debug(f"Frame decoded successfully: shape={frame.shape}")
+            break  # Exit loop if decoding succeeds
         
+        except Exception as e:
+            logger.error(f"Error decoding frame on attempt {attempt + 1}/{max_retries}: {e}")
+            time.sleep(retry_delay)
+    
+    # If frame is still None after retries, skip processing
+    if frame is None:
+        logger.warning(f"Failed to decode frame after {max_retries} attempts")
+        emit('error', {'message': 'Unable to process frame'})
+        return
+    
+    # Process the frame using the session’s liveness detector
+    try:
         detector = active_sessions[session_id]['detector']
-        result = detector.process_frame(frame)
+        result = detector.process_frame(frame)  # Get detailed processing results
         
+        # Extract display and debug frames from the result
         display_frame = result['display_frame']
         debug_frame = result['debug_frame']
         
+        # Encode the display frame to base64 if it exists
         if display_frame is not None:
-            _, buffer_disp = cv2.imencode('.jpg', display_frame)
-            disp_b64 = base64.b64encode(buffer_disp).decode('utf-8')
+            _, buffer_disp = cv2.imencode('.jpg', display_frame)  # Convert to JPEG
+            disp_b64 = base64.b64encode(buffer_disp).decode('utf-8')  # Encode to base64 string
             logger.debug("Display frame encoded")
         else:
-            disp_b64 = None
+            disp_b64 = None  # No display frame available
             logger.debug("Display frame is None")
         
+        # Encode the debug frame to base64 if it exists
         debug_b64 = None
         if debug_frame is not None:
-            _, buffer_dbg = cv2.imencode('.jpg', debug_frame)
-            debug_b64 = base64.b64encode(buffer_dbg).decode('utf-8')
+            _, buffer_dbg = cv2.imencode('.jpg', debug_frame)  # Convert to JPEG
+            debug_b64 = base64.b64encode(buffer_dbg).decode('utf-8')  # Encode to base64 string
             logger.debug("Debug frame encoded")
         else:
             logger.debug("Debug frame is None")
         
+        # Prepare the data packet to send back to the client
         emit_data = {
-            'image': f"data:image/jpeg;base64,{disp_b64}" if disp_b64 else None,
-            'debug_image': f"data:image/jpeg;base64,{debug_b64}" if debug_b64 else None,
-            'challenge': result['challenge_text'],
-            'action_completed': result['action_completed'],
-            'word_completed': result['word_completed'],
-            'time_remaining': result['time_remaining'],
-            'verification_result': result['verification_result'],
-            'exit_flag': result['exit_flag'],
-            'duress_detected': result['duress_detected']
+            'image': f"data:image/jpeg;base64,{disp_b64}" if disp_b64 else None,  # Display frame or None
+            'debug_image': f"data:image/jpeg;base64,{debug_b64}" if debug_b64 else None,  # Debug frame or None
+            'challenge': result['challenge_text'],  # Current challenge instruction
+            'action_completed': result['action_completed'],  # Action status (True/False)
+            'word_completed': result['word_completed'],  # Speech status (True/False)
+            'time_remaining': result['time_remaining'],  # Time left for challenge
+            'verification_result': result['verification_result'],  # 'PENDING', 'PASS', or 'FAIL'
+            'exit_flag': result['exit_flag'],  # Whether to stop processing
+            'duress_detected': result['duress_detected']  # Whether duress was detected
         }
+        # Log the data being emitted for debugging
         logger.debug(f"Emitting processed_frame: has_image={bool(disp_b64)}, has_debug={bool(debug_b64)}")
-        emit('processed_frame', emit_data)
+        emit('processed_frame', emit_data)  # Send the data to the client
         
+        # Handle the outcome if the challenge is complete
         if result['exit_flag']:
+            # Increment the attempt counter
             active_sessions[session_id]['attempts'] = active_sessions[session_id].get('attempts', 0) + 1
-            if result['verification_result'] == 'PASS' or active_sessions[session_id]['attempts'] >= 3 or result['duress_detected']:
-                if code and code in verification_codes:
-                    verification_codes[code]['status'] = 'completed'
-                    verification_codes[code]['result'] = result['verification_result']
-                    requester_id = verification_codes[code]['requester_id']
+            logger.debug(f"Attempt {active_sessions[session_id]['attempts']} for session {session_id}")
+            requester_id = verification_codes[code]['requester_id']  # Get the requester’s ID
+            
+            # If duress is detected, notify requester and clean up
+            if result['duress_detected']:
+                emit('verification_result', {
+                    'result': 'FAIL',
+                    'code': code,
+                    'duress_detected': True
+                }, room=requester_id)
+                cleanup_session(session_id, code)
+            # If verification passes, notify requester and clean up
+            elif result['verification_result'] == 'PASS':
+                emit('verification_result', {
+                    'result': 'PASS',
+                    'code': code,
+                    'duress_detected': False
+                }, room=requester_id)
+                cleanup_session(session_id, code)
+            # If verification fails or times out
+            elif result['verification_result'] == 'FAIL' or result['time_remaining'] <= 0:
+                # If max attempts reached, notify requester and clean up
+                if active_sessions[session_id]['attempts'] >= 3:
                     emit('verification_result', {
-                        'result': result['verification_result'],
+                        'result': 'FAIL',
                         'code': code,
-                        'duress_detected': result['duress_detected']
+                        'duress_detected': False
                     }, room=requester_id)
-            elif result['verification_result'] == 'FAIL':
-                detector.reset()
-                logger.info(f"Reset detector after failure for session {session_id}")
+                    cleanup_session(session_id, code)
+                else:
+                    # Reset the detector for another attempt and send new challenge
+                    detector.reset()
+                    logger.info(f"Reset detector after failure/timeout for session {session_id}, attempt {active_sessions[session_id]['attempts']}")
+                    challenge_text, _, _, _ = detector.challenge_manager.get_challenge_status(
+                        detector.head_pose, detector.blink_count, detector.last_speech or ""
+                    )
+                    emit('challenge', {'text': challenge_text})
+    
     except Exception as e:
+        # Log any errors during frame processing
         logger.error(f"Error processing frame: {e}")
+        # Notify the client of the error
         emit('error', {'message': str(e)})
 
+# SocketIO event handler for when verification is explicitly completed
 @socketio.on('verification_complete')
 def handle_verification_complete(data):
-    code = data.get('code')
-    result = data.get('result')
+    code = data.get('code')  # Get the verification code from the data
+    result = data.get('result')  # Get the result ('PASS' or 'FAIL')
     
+    # Check if the code exists in verification_codes
     if code and code in verification_codes:
-        verification_codes[code]['status'] = 'completed'
-        verification_codes[code]['result'] = result
-        
-        requester_id = verification_codes[code]['requester_id']
+        requester_id = verification_codes[code]['requester_id']  # Get the requester’s ID
+        # Notify the requester of the verification result
         emit('verification_result', {
             'result': result,
             'code': code
         }, room=requester_id)
-        
+        # Clean up all sessions associated with this code
+        for session_id, session_data in list(active_sessions.items()):
+            if session_data.get('code') == code:
+                cleanup_session(session_id, code)
+        # Log the completion of the verification
         logger.info(f"Verification {code} completed with result: {result}")
 
-if __name__ == '__main__':
-    os.makedirs('static/qr_codes', exist_ok=True)
-    cleanup_thread = threading.Thread(target=cleanup_inactive_sessions)
-    cleanup_thread.daemon = True
-    cleanup_thread.start()
+@socketio.on('audio_data')
+def handle_audio_data(data):
+    session_id = request.sid
+    code = data.get('code')
     
+    if session_id not in active_sessions or active_sessions[session_id]['code'] != code:
+        logger.warning(f"Received audio from unknown or invalid session: {session_id}, code: {code}")
+        emit('session_error', {'message': 'Invalid session or code'})
+        return
+    
+    detector = active_sessions[session_id]['detector']
+    audio_bytes = data['audio']  # Received as bytes (ArrayBuffer from client)
+    
+    if isinstance(audio_bytes, (bytes, bytearray)):
+        detector.speech_recognizer.add_audio_chunk(audio_bytes)
+        if config.DEBUG and (session_id not in last_log_time or time.time() - last_log_time.get(session_id, 0) >= 1.0):
+            logger.debug(f"Received audio chunk for session {session_id}, size: {len(audio_bytes)} bytes")
+            last_log_time[session_id] = time.time()
+    else:
+        logger.error(f"Invalid audio data type received: {type(audio_bytes)}")
+
+# Main execution block, runs if the script is executed directly
+if __name__ == '__main__':
+    # Create the QR code directory if it doesn’t exist
+    os.makedirs('static/qr_codes', exist_ok=True)
+    # Start a background thread to clean up inactive sessions
+    cleanup_thread = threading.Thread(target=cleanup_inactive_sessions)
+    cleanup_thread.daemon = True  # Thread will stop when the main program exits
+    cleanup_thread.start()  # Begin the cleanup loop
+    
+    # Launch the Flask-SocketIO server with configured settings
     socketio.run(
-        app,
-        host=config.HOST,
-        port=config.PORT,
-        debug=config.DEBUG,
-        certfile=config.CERTFILE,
-        keyfile=config.KEYFILE
+        app,  # Flask application instance
+        host=config.HOST,  # Host address (e.g., '0.0.0.0' to listen on all interfaces)
+        port=config.PORT,  # Port number (e.g., 8080) from config
+        debug=config.DEBUG,  # Enable debug mode if True in config
+        certfile=config.CERTFILE,  # Path to SSL certificate file for HTTPS
+        keyfile=config.KEYFILE  # Path to SSL private key file for HTTPS
     )
 
 
@@ -1571,119 +1836,123 @@ class ActionDetector:
     """Detects specific actions for liveness verification."""
     
     def __init__(self, config):
-        """Initialize the action detector with configuration."""
-        self.config = config
-        self.logger = logging.getLogger(__name__)
+        self.config = config  # Store configuration object
+        self.logger = logging.getLogger(__name__)  # Create logger for this module
         
-        # Load dlib face detector and shape predictor
-        self.dlib_detector = dlib.get_frontal_face_detector()
+        self.dlib_detector = dlib.get_frontal_face_detector()  # Initialize dlib face detector
         try:
+            # Load dlib's facial landmark predictor
             self.dlib_predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
-            self.using_dlib = True
-            self.logger.info("Using dlib for facial landmark detection in ActionDetector")
+            self.using_dlib = True  # Flag indicating successful dlib initialization
+            self.logger.info("Using dlib for facial landmark detection in ActionDetector")  # Log success
         except Exception as e:
-            self.logger.error(f"Could not load dlib shape predictor: {e}")
+            self.logger.error(f"Could not load dlib shape predictor: {e}")  # Log failure
             self.using_dlib = False
-            raise ValueError("Dlib shape predictor is required for action detection")
+            raise ValueError("Dlib shape predictor is required for action detection")  # Raise error if failed
         
-        # Action detection variables
-        self.current_action = None
-        self.action_completed = False
-        self.action_start_time = None
+        # Initialize action tracking variables
+        self.current_action = None  # Current action to detect
+        self.action_completed = False  # Flag for action completion
+        self.action_start_time = None  # Timestamp when action detection started
         
-        # Head pose tracking
-        self.face_positions = deque(maxlen=config.FACE_POSITION_HISTORY_LENGTH)
+        # Queue to store face angles for smoothing
         self.face_angles = deque(maxlen=config.FACE_POSITION_HISTORY_LENGTH)
-        self.head_pose = "center"  # center, left, right, up, down
-
-        # [CHANGED] Rate-limit debug logs
-        self.last_debug_time = 0.0
+        self.head_pose = "center"  # Default head pose
+        self.last_debug_time = 0.0  # Last time a debug message was logged
     
     def set_action(self, action: str) -> None:
-        """
-        Set the current action to detect.
-        
-        Args:
-            action: Action name ("left", "right", "up", "down")
-        """
-        self.current_action = action
-        self.action_completed = False
-        self.action_start_time = None
-        self.logger.debug(f"Action set to: {action}")
+        """Set the action to detect."""
+        self.current_action = action  # Assign new action
+        self.action_completed = False  # Reset completion flag
+        self.action_start_time = None  # Clear start time
+        self.logger.debug(f"Action set to: {action}")  # Log action setting
     
     def detect_head_pose(self, frame: np.ndarray, face_rect: Tuple[int, int, int, int]) -> str:
         """
-        Detect head pose (left, right, up, down, center).
+        Detect head pose (left, right, up, down, center) using facial landmarks.
         """
         if face_rect is None:
-            return self.head_pose
+            return self.head_pose  # Return last known pose if no face detected
         
-        x, y, w, h = face_rect
+        x, y, w, h = face_rect  # Unpack face rectangle coordinates
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)  # Convert frame to grayscale
+        dlib_rect = dlib.rectangle(x, y, x + w, y + h)  # Create dlib rectangle
+        landmarks = self.dlib_predictor(gray, dlib_rect)  # Detect facial landmarks
+
+        # Extract key landmark points
+        nose = np.array([landmarks.part(30).x, landmarks.part(30).y])  # Nose tip
+        left_eye = np.array([landmarks.part(36).x, landmarks.part(36).y])  # Left eye corner
+        right_eye = np.array([landmarks.part(45).x, landmarks.part(45).y])  # Right eye corner
+
+        # Calculate horizontal ratio (Right/Left instead of Left/Right)
+        left_dist = np.linalg.norm(nose - left_eye)  # Distance from nose to left eye
+        right_dist = np.linalg.norm(nose - right_eye)  # Distance from nose to right eye
+        horizontal_ratio = right_dist / left_dist if left_dist != 0 else 1.0  # Compute ratio
+
+        # Calculate vertical offset for up/down detection
+        face_center_y = (y + y + h) / 2  # Vertical center of face
+        nose_offset = nose[1] - face_center_y  # Nose position relative to center
+
+        # Add current measurements to history for smoothing
+        self.face_angles.append((horizontal_ratio, nose_offset))
         
-        face_center_x = x + w/2
-        frame_center_x = frame.shape[1] / 2
-        face_center_y = y + h/2
-        frame_center_y = frame.shape[0] / 2
-        
-        x_offset = face_center_x - frame_center_x
-        y_offset = face_center_y - frame_center_y
-        
-        x_offset_normalized = x_offset / (frame.shape[1] / 2)
-        y_offset_normalized = y_offset / (frame.shape[0] / 2)
-        
-        self.face_angles.append((x_offset_normalized, y_offset_normalized))
-        
-        if len(self.face_angles) >= 5:
-            angles_list = list(self.face_angles)
-            avg_x_offset = sum(a[0] for a in angles_list) / len(angles_list)
-            avg_y_offset = sum(a[1] for a in angles_list) / len(angles_list)
+        # Process pose when enough history is accumulated
+        if len(self.face_angles) >= self.config.FACE_POSITION_HISTORY_LENGTH:
+            angles_list = list(self.face_angles)  # Convert deque to list
+            avg_ratio = sum(a[0] for a in angles_list) / len(angles_list)  # Average horizontal ratio
+            avg_offset = sum(a[1] for a in angles_list) / len(angles_list)  # Average vertical offset
             
-            x_threshold = self.config.HEAD_POSE_THRESHOLD_X
-            y_threshold_up = self.config.HEAD_POSE_THRESHOLD_Y_UP
-            y_threshold_down = self.config.HEAD_POSE_THRESHOLD_Y_DOWN
+            # Define symmetric thresholds from config
+            HORIZONTAL_THRESHOLD = self.config.HEAD_POSE_THRESHOLD_HORIZONTAL
+            CENTER_MIN = 1.0 - HORIZONTAL_THRESHOLD  # Minimum ratio for center
+            CENTER_MAX = 1.0 + HORIZONTAL_THRESHOLD  # Maximum ratio for center
+            UP_THRESHOLD = -self.config.HEAD_POSE_THRESHOLD_UP  # Negative for upward movement
+            DOWN_THRESHOLD = self.config.HEAD_POSE_THRESHOLD_DOWN  # Positive for downward movement
             
-            old_pose = self.head_pose
+            old_pose = self.head_pose  # Store previous pose for comparison
             
-            if avg_x_offset < -x_threshold:
+            # Determine head pose based on averaged values
+            if avg_ratio > CENTER_MAX:
                 self.head_pose = "right"
-            elif avg_x_offset > x_threshold:
+            elif avg_ratio < CENTER_MIN:
                 self.head_pose = "left"
-            elif avg_y_offset < -y_threshold_up:
+            elif avg_offset < UP_THRESHOLD:
                 self.head_pose = "up"
-            elif avg_y_offset > y_threshold_down:
+            elif avg_offset > DOWN_THRESHOLD:
                 self.head_pose = "down"
             else:
                 self.head_pose = "center"
             
+            # Log pose change if it differs and rate-limited (1-second interval)
             now = float(cv2.getTickCount()) / cv2.getTickFrequency()
             if self.head_pose != old_pose and now - self.last_debug_time > 1.0:
-                self.logger.debug(f"{self.head_pose.upper()} detected!")
+                self.logger.debug(f"{self.head_pose.upper()} detected! Ratio: {avg_ratio:.2f}, Offset: {avg_offset:.1f}")
                 self.last_debug_time = now
             
-            # Draw direction indicator for debugging
-            center_x = int(frame.shape[1] / 2)
-            center_y = int(frame.shape[0] / 2)
-            direction_x = int(center_x + avg_x_offset * 100)
-            direction_y = int(center_y + avg_y_offset * 100)
-            cv2.line(frame, (center_x, center_y), (direction_x, direction_y), (0, 255, 255), 2)
+            # Add debug visualization to frame
+            cv2.circle(frame, tuple(nose), 2, (0, 255, 0), -1)  # Mark nose
+            cv2.circle(frame, tuple(left_eye), 2, (0, 255, 0), -1)  # Mark left eye
+            cv2.circle(frame, tuple(right_eye), 2, (0, 255, 0), -1)  # Mark right eye
+            cv2.line(frame, tuple(nose), tuple(left_eye), (255, 0, 0), 1)  # Line to left eye
+            cv2.line(frame, tuple(nose), tuple(right_eye), (255, 0, 0), 1)  # Line to right eye
+            direction_x = int(x + w/2 + (avg_ratio - 1) * 50)  # Horizontal direction indicator
+            direction_y = int(face_center_y + avg_offset)  # Vertical direction indicator
+            cv2.line(frame, (int(x + w/2), int(face_center_y)), (direction_x, direction_y), (0, 255, 255), 2)  # Direction line
         
-        return self.head_pose
+        return self.head_pose  # Return detected pose
     
     def detect_action(self, frame: np.ndarray, face_rect: Tuple[int, int, int, int]) -> bool:
-        """
-        Detect the specified action.
-        """
+        """Detect if the specified action is performed."""
         if self.current_action is None or face_rect is None:
-            return False
+            return False  # No action to detect or no face
         
-        current_pose = self.detect_head_pose(frame, face_rect)
-        self.action_completed = (current_pose.lower() == self.current_action.lower())
-        return self.action_completed
+        current_pose = self.detect_head_pose(frame, face_rect)  # Get current head pose
+        self.action_completed = (current_pose.lower() == self.current_action.lower())  # Check if pose matches action
+        return self.action_completed  # Return completion status
     
     def is_action_completed(self):
-        """Check if the current action is completed."""
-        return self.action_completed
-
+        """Check if the current action has been completed."""
+        return self.action_completed  # Return current completion state
 
 
 ===== static/css/style.css =====
@@ -2352,216 +2621,282 @@ input[type="text"]:focus {
 
 ===== static/js/app.js =====
 
+// Wait for the HTML document to fully load before running the script
 document.addEventListener('DOMContentLoaded', () => {
-    const video = document.getElementById('webcam');
-    const canvas = document.getElementById('overlay');
-    const ctx = canvas.getContext('2d');
-    const debugFrame = document.getElementById('debug-frame');
-    const challengeText = document.getElementById('challenge-text');
-    const actionStatus = document.getElementById('action-status');
-    const wordStatus = document.getElementById('word-status');
-    const timeRemaining = document.getElementById('time-remaining');
-    const resultContainer = document.getElementById('result-container');
-    const resultText = document.getElementById('result-text');
-    const resetButton = document.getElementById('reset-button');
-    const videoContainer = document.querySelector('.video-container');
-    const sessionCode = document.getElementById('session-code').textContent;
+    // Get references to DOM elements used in the application
+    const video = document.getElementById('webcam'); // The live webcam feed element
+    const canvas = document.getElementById('overlay'); // Canvas for overlaying text or effects
+    const ctx = canvas.getContext('2d'); // 2D drawing context for the canvas
+    const debugFrame = document.getElementById('debug-frame'); // Element to display processed debug frames
+    const challengeText = document.getElementById('challenge-text'); // Displays the current challenge (e.g., "Turn left")
+    const actionStatus = document.getElementById('action-status'); // Shows if the action part of the challenge is complete
+    const wordStatus = document.getElementById('word-status'); // Shows if the spoken word part is complete
+    const timeRemaining = document.getElementById('time-remaining'); // Displays remaining time for the challenge
+    const resultContainer = document.getElementById('result-container'); // Container for showing verification results
+    const resultText = document.getElementById('result-text'); // Text element for result messages
+    const resetButton = document.getElementById('reset-button'); // Button to manually reset the verification
+    const videoContainer = document.querySelector('.video-container'); // Container for video and debug frame
+    const processedFrameContainer = document.getElementById('processed-frame-container'); // Container for debug frame
+    const sessionCode = document.getElementById('session-code').textContent; // Verification code from the HTML
     
-    let socket;
-    let isProcessing = false;
-    let stream = null;
-    let verificationAttempts = 0;
-    const MAX_VERIFICATION_ATTEMPTS = 3;
-    let isDebugMode = true;
-    let showDebugFrame = true;
-    let frameCount = 0;
+    // Declare variables used throughout the script
+    let socket; // Socket.IO connection to the server
+    let isProcessing = false; // Flag to control frame capturing and sending
+    let stream = null; // Webcam media stream
+    let verificationAttempts = 0; // Counter for verification attempts
+    const MAX_VERIFICATION_ATTEMPTS = 3; // Maximum allowed attempts before failing
+    let isDebugMode = true; // Whether debug logging is enabled (set by server)
+    let showDebugFrame = true; // Whether to show the debug frame (set by server)
+    let frameCount = 0; // Counter for frames sent to the server
     
+    // Mute the video to avoid audio feedback
     video.muted = true;
     video.volume = 0;
 
+    // Initialize the Socket.IO connection and set up event listeners
     function initSocket() {
         console.log('Initializing socket connection for verification');
-        socket = io();
+        socket = io(); // Create a new Socket.IO connection to the server
         
+        // When the socket connects to the server
         socket.on('connect', () => {
             console.log('Connected to server for verification');
             socket.emit('join_verification', { code: sessionCode });
             socket.emit('get_debug_status');
+            if (stream && !mediaRecorder) {
+                setupAudioStream(); // Start audio if not already started
+            }
         });
         
+        // Handle debug status response from the server
         socket.on('debug_status', (data) => {
-            isDebugMode = data.debug;
-            showDebugFrame = data.showDebugFrame;
+            isDebugMode = data.debug; // Set debug mode based on server config
+            showDebugFrame = data.showDebugFrame; // Set whether to show debug frame
             console.log(`Debug mode: ${isDebugMode}, Show debug frame: ${showDebugFrame}`);
-            debugFrame.style.display = showDebugFrame ? 'block' : 'none';
-            isProcessing = true;
+            
+            // Adjust UI visibility based on whether debug frame should be shown
+            if (showDebugFrame) {
+                processedFrameContainer.classList.remove('hidden'); // Show the debug frame container
+                debugFrame.classList.remove('hidden'); // Show the debug frame element
+                videoContainer.classList.remove('single-video'); // Adjust layout for dual video display
+            } else {
+                processedFrameContainer.classList.add('hidden'); // Hide the debug frame container
+                debugFrame.classList.add('hidden'); // Hide the debug frame element
+                videoContainer.classList.add('single-video'); // Adjust layout for single video
+            }
+            
+            isProcessing = true; // Start processing frames
             console.log('Processing started after debug status received');
-            requestAnimationFrame(captureAndSendFrame);
+            requestAnimationFrame(captureAndSendFrame); // Begin capturing and sending frames
         });
         
+        // Handle processed frame data from the server
         socket.on('processed_frame', (data) => {
+            // Log frame data every 30 frames if in debug mode
             if (isDebugMode && frameCount % 30 === 0) {
                 console.log('Received processed_frame:', {
-                    hasImage: !!data.image,
-                    hasDebugImage: !!data.debug_image,
-                    challenge: data.challenge,
-                    action: data.action_completed,
-                    word: data.word_completed,
-                    time: data.time_remaining,
-                    result: data.verification_result,
-                    duress: data.duress_detected
+                    hasImage: !!data.image, // Whether a regular image was received
+                    hasDebugImage: !!data.debug_image, // Whether a debug image was received
+                    challenge: data.challenge, // Current challenge text
+                    action: data.action_completed, // Action completion status
+                    word: data.word_completed, // Word completion status
+                    time: data.time_remaining, // Remaining time for the challenge
+                    result: data.verification_result, // Verification result (PASS, FAIL, PENDING)
+                    duress: data.duress_detected // Whether duress was detected
                 });
             }
             
-            if (data.debug_image) {
-                debugFrame.src = data.debug_image;
-                debugFrame.classList.remove('hidden');
-                debugFrame.style.display = showDebugFrame ? 'block' : 'none';
+            // Update the debug frame or fallback to regular image
+            if (showDebugFrame && data.debug_image) {
+                debugFrame.src = data.debug_image; // Set debug frame source to the processed debug image
+                processedFrameContainer.classList.add('visible'); // Make debug container visible
+                videoContainer.classList.add('double-video'); // Adjust layout for two videos
             } else if (data.image) {
-                debugFrame.src = data.image;
-                debugFrame.classList.remove('hidden');
-                debugFrame.style.display = showDebugFrame ? 'block' : 'none';
+                debugFrame.src = data.image; // Use regular image as fallback if no debug image
+                if (!showDebugFrame) {
+                    processedFrameContainer.classList.remove('visible'); // Hide debug container if not in debug mode
+                    videoContainer.classList.remove('double-video'); // Adjust layout for single video
+                }
             }
-            
+        
+            // Update challenge text on the UI
             if (data.challenge) {
-                challengeText.textContent = data.challenge;
+                challengeText.textContent = data.challenge; // Display the current challenge
             } else {
-                challengeText.textContent = 'Waiting for challenge...';
+                challengeText.textContent = 'Waiting for challenge...'; // Default message if no challenge
             }
             
-            actionStatus.textContent = data.action_completed ? '✅' : '❌';
-            wordStatus.textContent = data.word_completed ? '✅' : '❌';
+            // Update action and word completion status indicators
+            actionStatus.textContent = data.action_completed ? '✅' : '❌'; // Green check or red X
+            wordStatus.textContent = data.word_completed ? '✅' : '❌'; // Green check or red X
             
+            // Update remaining time display
             if (data.time_remaining !== undefined) {
-                timeRemaining.textContent = Math.max(0, Math.ceil(data.time_remaining)) + 's';
+                timeRemaining.textContent = Math.max(0, Math.ceil(data.time_remaining)) + 's'; // Show time left, min 0
             }
             
+            // Handle verification result when it's not pending
             if (data.verification_result !== 'PENDING') {
-                isProcessing = false;
+                isProcessing = false; // Stop capturing new frames
+                
+                // Freeze the video and overlay the result
+                video.pause(); // Pause the live video feed
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height); // Draw the last frame on the canvas
+                canvas.style.display = 'block'; // Show the canvas over the video
+                
+                // Determine the result message and color
+                let resultMessage, textColor;
                 if (data.duress_detected) {
-                    resultText.textContent = 'Under Duress Detected!';
-                    resultText.className = 'result-text duress';
-                    applyVideoEffect('duress');
-                    resultContainer.classList.remove('hidden');
-                    setTimeout(() => window.location.href = '/', 5000);
+                    resultMessage = 'Duress Detected!'; // Message for duress detection
+                    textColor = '#ff0000'; // Red color
+                    applyVideoEffect('duress'); // Apply duress visual effect
                 } else if (data.verification_result === 'PASS') {
-                    resultText.textContent = 'Verification Successful!';
-                    resultText.className = 'result-text success';
-                    applyVideoEffect('success');
-                    resultContainer.classList.remove('hidden');
-                    setTimeout(() => window.location.href = '/', 5000);
+                    resultMessage = 'Verification Successful!'; // Success message
+                    textColor = '#4cd137'; // Green color
+                    applyVideoEffect('success'); // Apply success visual effect
                 } else {
-                    resultText.textContent = 'Verification Failed!';
-                    resultText.className = 'result-text failure';
-                    applyVideoEffect('failure');
-                    resultContainer.classList.remove('hidden');
-                    
-                    verificationAttempts++;
-                    console.log(`Attempt ${verificationAttempts} of ${MAX_VERIFICATION_ATTEMPTS}`);
-                    if (verificationAttempts >= MAX_VERIFICATION_ATTEMPTS) {
-                        resultText.textContent = 'Maximum attempts reached. Verification failed.';
-                        setTimeout(() => window.location.href = '/', 5000);
-                    } else {
-                        setTimeout(() => {
-                            isProcessing = true;
-                            removeVideoEffect();
-                            requestAnimationFrame(captureAndSendFrame);
-                        }, 3000);
-                    }
+                    resultMessage = 'Verification Failed!'; // Failure message
+                    textColor = '#e8603e'; // Orange-red color
+                    applyVideoEffect('failure'); // Apply failure visual effect
+                }
+                
+                // Draw a semi-transparent background for the result text
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, canvas.height / 2 - 40, canvas.width, 80);
+                // Draw the result text on the canvas
+                ctx.fillStyle = textColor;
+                ctx.font = 'bold 30px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(resultMessage, canvas.width / 2, canvas.height / 2 + 10);
+                
+                // Update the result container in the UI
+                resultText.textContent = resultMessage;
+                resultText.className = `result-text ${data.duress_detected ? 'duress' : data.verification_result === 'PASS' ? 'success' : 'failure'}`;
+                resultContainer.classList.remove('hidden'); // Show the result container
+                
+                verificationAttempts++; // Increment the attempt counter
+                console.log(`Attempt ${verificationAttempts} of ${MAX_VERIFICATION_ATTEMPTS}`);
+                
+                // Handle final outcomes or reset for next attempt
+                if (data.verification_result === 'PASS' || data.duress_detected || verificationAttempts >= MAX_VERIFICATION_ATTEMPTS) {
+                    setTimeout(() => window.location.href = '/', 3000); // Redirect to home after 3 seconds
+                } else {
+                    setTimeout(() => {
+                        isProcessing = true; // Resume processing
+                        canvas.style.display = 'none'; // Hide the canvas
+                        video.play(); // Resume the video
+                        removeVideoEffect(); // Remove visual effect
+                        requestAnimationFrame(captureAndSendFrame); // Start capturing frames again
+                    }, 1000); // Wait 1 second before resuming
                 }
             } else if (isProcessing) {
-                requestAnimationFrame(captureAndSendFrame);
+                requestAnimationFrame(captureAndSendFrame); // Continue capturing if still processing
             }
             
+            // Handle timeout when time runs out but result is still pending
             if (data.time_remaining <= 0 && data.verification_result === 'PENDING') {
-                socket.emit('reset', { code: sessionCode });
-                verificationAttempts++;
+                socket.emit('reset', { code: sessionCode }); // Request a reset from the server
+                verificationAttempts++; // Increment attempt counter
                 
                 if (verificationAttempts >= MAX_VERIFICATION_ATTEMPTS) {
+                    // If max attempts reached, show failure and redirect
                     resultText.textContent = 'Maximum attempts reached. Verification failed.';
                     resultText.className = 'result-text failure';
                     resultContainer.classList.remove('hidden');
                     isProcessing = false;
-                    setTimeout(() => window.location.href = '/', 5000);
+                    applyVideoEffect('failure');
+                    setTimeout(() => window.location.href = '/', 3000); // Redirect after 3 seconds
                 } else {
-                    challengeText.textContent = `Attempt ${verificationAttempts+1} of ${MAX_VERIFICATION_ATTEMPTS}...`;
+                    // Show attempt number and wait for new challenge
+                    challengeText.textContent = `Attempt ${verificationAttempts + 1} of ${MAX_VERIFICATION_ATTEMPTS}...`;
                     setTimeout(() => {
                         challengeText.textContent = 'Waiting for new challenge...';
                         isProcessing = true;
-                        requestAnimationFrame(captureAndSendFrame);
-                    }, 2000);
+                        requestAnimationFrame(captureAndSendFrame); // Resume frame capture
+                    }, 2000); // Wait 2 seconds before resuming
                 }
             }
         });
         
+        // Handle server errors
         socket.on('error', (data) => {
             console.error('Server error:', data.message);
-            alert('Server error: ' + data.message);
+            alert('Server error: ' + data.message); // Alert the user
         });
         
+        // Handle max attempts reached event from server
         socket.on('max_attempts_reached', () => {
-            isProcessing = false;
+            isProcessing = false; // Stop processing
             resultText.textContent = 'Maximum verification attempts reached.';
             resultContainer.classList.remove('hidden');
             applyVideoEffect('failure');
-            setTimeout(() => window.location.href = '/', 5000);
+            setTimeout(() => window.location.href = '/', 5000); // Redirect after 5 seconds
         });
         
+        // Handle disconnection from the server
         socket.on('disconnect', () => {
             console.log('Disconnected from server');
-            isProcessing = false;
+            isProcessing = false; // Stop processing on disconnect
         });
         
+        // Handle new challenge text from the server
         socket.on('challenge', (data) => {
             if (data && data.text) {
-                challengeText.textContent = data.text;
+                challengeText.textContent = data.text; // Update challenge text
             }
         });
     }
     
+    // Apply visual effects to the video container based on verification result
     function applyVideoEffect(effect) {
         if (effect === 'success') {
-            videoContainer.classList.add('success-overlay');
+            videoContainer.classList.add('success-overlay'); // Green overlay for success
         } else if (effect === 'failure') {
-            videoContainer.classList.add('failure-overlay');
+            videoContainer.classList.add('failure-overlay'); // Red overlay for failure
         } else if (effect === 'duress') {
-            videoContainer.classList.add('duress-overlay');
+            videoContainer.classList.add('duress-overlay'); // Special overlay for duress
         }
     }
     
+    // Remove all visual effects from the video container
     function removeVideoEffect() {
         videoContainer.classList.remove('success-overlay', 'failure-overlay', 'duress-overlay');
-        // Do not hide resultContainer here to keep status visible
     }
     
+    // Capture a frame from the webcam and send it to the server
     function captureAndSendFrame() {
         if (!isProcessing) {
             console.log('Processing stopped, not capturing frame');
-            return;
+            return; // Exit if not processing
         }
         
         try {
+            // Create an offscreen canvas to capture the video frame
             const offscreenCanvas = document.createElement('canvas');
             offscreenCanvas.width = video.videoWidth;
             offscreenCanvas.height = video.videoHeight;
             const offscreenCtx = offscreenCanvas.getContext('2d');
-            offscreenCtx.drawImage(video, 0, 0, offscreenCanvas.width, offscreenCanvas.height);
-            const imageData = offscreenCanvas.toDataURL('image/jpeg', 0.8);
+            offscreenCtx.drawImage(video, 0, 0, offscreenCanvas.width, offscreenCanvas.height); // Draw video frame
+            const imageData = offscreenCanvas.toDataURL('image/jpeg', 0.8); // Convert to JPEG with 80% quality
             
+            // Log frame sending every 30 frames in debug mode
             if (isDebugMode && frameCount % 30 === 0) {
                 console.log(`Sending frame #${frameCount}`);
             }
             
+            // Send the frame to the server with the session code
             socket.emit('process_frame', {
                 image: imageData,
                 code: sessionCode
             });
-            frameCount++;
+            frameCount++; // Increment frame counter
         } catch (err) {
-            console.error('Error capturing frame:', err);
+            console.error('Error capturing frame:', err); // Log any errors
         }
     }
     
+    // Initialize the webcam and start the video feed
+    // Enhance initWebcam to log stream details
     async function initWebcam() {
         try {
             stream = await navigator.mediaDevices.getUserMedia({
@@ -2572,138 +2907,240 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
                 audio: true
             });
+            console.log('Stream initialized with tracks:', stream.getTracks());
             video.srcObject = stream;
             video.onloadedmetadata = () => {
                 video.play().catch(err => console.error('Error playing video:', err));
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
+                setupAudioStream(); // Start audio processing
                 requestAnimationFrame(captureAndSendFrame);
             };
         } catch (err) {
-            console.error('Error accessing webcam:', err);
-            alert('Error accessing webcam: ' + err.message);
+            console.error('Error accessing webcam or microphone:', err);
+            alert('Error accessing webcam or microphone: ' + err.message);
+        }
+    }
+
+    function setupAudioStream() {
+        audioStream = stream; // Original stream with video + audio
+        const audioTracks = audioStream.getAudioTracks();
+        if (!audioTracks.length) {
+            console.error('No audio tracks available in the stream. Check microphone permissions.');
+            alert('No audio detected. Please ensure your microphone is enabled and permissions are granted.');
+            return;
+        }
+    
+        // Create a new stream with only audio tracks
+        const audioOnlyStream = new MediaStream(audioTracks);
+        console.log('Audio-only stream created with tracks:', audioOnlyStream.getTracks());
+    
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const source = audioContext.createMediaStreamSource(audioOnlyStream);
+    
+        // Check for supported MIME types
+        const supportedMimeTypes = [
+            'audio/webm;codecs=opus',
+            'audio/webm',
+            'audio/mp4',
+            'audio/ogg',
+            'audio/wav'
+        ];
+        const mimeType = supportedMimeTypes.find(type => MediaRecorder.isTypeSupported(type)) || 'audio/webm';
+        console.log(`Selected MIME type: ${mimeType}`);
+    
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+            console.error('No supported audio MIME type found for MediaRecorder');
+            alert('Your browser does not support audio recording required for verification.');
+            return;
+        }
+    
+        try {
+            mediaRecorder = new MediaRecorder(audioOnlyStream, { mimeType: mimeType });
+            console.log('MediaRecorder initialized with audio-only stream:', audioOnlyStream);
+    
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0 && socket && socket.connected) {
+                    console.log('Audio chunk size:', event.data.size);
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        const audioData = reader.result; // ArrayBuffer of audio data
+                        socket.emit('audio_data', { 
+                            audio: audioData, 
+                            code: sessionCode 
+                        });
+                        if (isDebugMode && frameCount % 30 === 0) {
+                            console.log('Sent audio chunk to server');
+                        }
+                    };
+                    reader.readAsArrayBuffer(event.data);
+                } else {
+                    console.warn('No audio data available or socket disconnected');
+                }
+            };
+    
+            mediaRecorder.onstop = () => {
+                console.log('MediaRecorder stopped');
+            };
+    
+            mediaRecorder.onerror = (event) => {
+                console.error('MediaRecorder error:', event.error);
+            };
+    
+            setTimeout(() => {
+                try {
+                    mediaRecorder.start(1000); // Emit data every 100ms
+                    console.log('Audio streaming started successfully');
+                    setInterval(() => console.log('MediaRecorder state:', mediaRecorder.state), 1000); // Log state every second
+                } catch (err) {
+                    console.error('Failed to start MediaRecorder after delay:', err);
+                    alert('Error starting audio recording: ' + err.message);
+                }
+            }, 100); // 100ms delay for stability
+        } catch (err) {
+            console.error('Failed to initialize MediaRecorder:', err);
+            alert('Error initializing audio recording: ' + err.message);
         }
     }
     
+    // Add click event listener to the reset button
     resetButton.addEventListener('click', () => {
-        if (socket && socket.connected) {
-            socket.emit('reset', { code: sessionCode });
-            isProcessing = true;
-            removeVideoEffect();
-            requestAnimationFrame(captureAndSendFrame);
+        if (socket && socket.connected) { // Check if socket is connected
+            socket.emit('reset', { code: sessionCode }); // Request a reset from the server
+            isProcessing = true; // Resume processing
+            removeVideoEffect(); // Clear any visual effects
+            requestAnimationFrame(captureAndSendFrame); // Start capturing frames again
         }
     });
     
+    // Initialize the application
     function init() {
-        initSocket();
-        initWebcam();
+        initSocket(); // Set up the socket connection
+        initWebcam(); // Start the webcam
     }
     
+    // Clean up resources when the page is unloaded
     window.addEventListener('beforeunload', () => {
         if (socket && socket.connected) {
             socket.disconnect();
         }
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+        }
+        if (audioContext) {
+            audioContext.close();
+        }
         if (stream) {
             stream.getTracks().forEach(track => track.stop());
         }
-    });
+    });    
     
-    init();
+    init(); // Run the initialization function
 });
 
 
 ===== static/js/landing.js =====
 
+// Wait for the HTML document to fully load before executing the script
 document.addEventListener('DOMContentLoaded', () => {
-    const generateCodeBtn = document.getElementById('generate-code-btn');
-    const codeDisplay = document.getElementById('code-display');
-    const verificationCode = document.getElementById('verification-code');
-    const verificationStatus = document.getElementById('verification-status');
-    const codeInput = document.getElementById('code-input');
-    const submitCodeBtn = document.getElementById('submit-code-btn');
-    const verifyContainer = document.getElementById('verify-container');
-    const verifyStatus = document.createElement('div');
-    const qrDisplay = document.createElement('div'); // Add QR code display
+    // Get references to DOM elements used in the application
+    const generateCodeBtn = document.getElementById('generate-code-btn'); // Button to generate a verification code
+    const codeDisplay = document.getElementById('code-display'); // Container to show the generated code
+    const verificationCode = document.getElementById('verification-code'); // Element to display the code text
+    const verificationStatus = document.getElementById('verification-status'); // Displays verification status messages
+    const codeInput = document.getElementById('code-input'); // Input field for entering a code
+    const submitCodeBtn = document.getElementById('submit-code-btn'); // Button to submit the entered code
+    const verifyContainer = document.getElementById('verify-container'); // Container for verification status
+    const verifyStatus = document.createElement('div'); // Dynamic element for showing validation status
+    const qrDisplay = document.createElement('div'); // Dynamic element to display the QR code
     
-    verifyStatus.className = 'verify-status';
-    verifyContainer.appendChild(verifyStatus);
-    qrDisplay.id = 'qr-display';
-    codeDisplay.appendChild(qrDisplay); // Add QR display under code
+    // Set up the verifyStatus element
+    verifyStatus.className = 'verify-status'; // Assign a class for styling
+    verifyContainer.appendChild(verifyStatus); // Add it to the verify container in the DOM
+    qrDisplay.id = 'qr-display'; // Set an ID for the QR code display element
+    codeDisplay.appendChild(qrDisplay); // Add QR display under the code display container
     
-    let socket;
-    let currentCode = null;
+    let socket; // Socket.IO connection to the server
+    let currentCode = null; // Stores the currently generated verification code
     
-    // Initialize Socket.IO connection
+    // Initialize the Socket.IO connection and set up event listeners
     function initSocket() {
         console.log('Initializing socket connection');
-        socket = io();
+        socket = io(); // Create a new Socket.IO connection to the server
         
+        // Handle successful connection to the server
         socket.on('connect', () => {
             console.log('Connected to server');
         });
         
+        // Handle disconnection from the server
         socket.on('disconnect', () => {
             console.log('Disconnected from server');
         });
         
+        // Handle errors from the server
         socket.on('error', (data) => {
             console.error('Socket error:', data);
-            verificationStatus.textContent = `Error: ${data.message}`;
-            verificationStatus.className = 'status-error';
+            verificationStatus.textContent = `Error: ${data.message}`; // Show error message
+            verificationStatus.className = 'status-error'; // Apply error styling
         });
         
+        // Handle receipt of a new verification code from the server
         socket.on('verification_code', (data) => {
             console.log('Received verification code:', data.code);
-            currentCode = data.code;
-            verificationCode.textContent = currentCode;
-            codeDisplay.classList.remove('hidden');
-            generateCodeBtn.classList.add('hidden');
-            qrDisplay.innerHTML = `<img src="${data.qr_code}" alt="QR Code for ${data.code}">`;
+            currentCode = data.code; // Store the received code
+            verificationCode.textContent = currentCode; // Display the code
+            codeDisplay.classList.remove('hidden'); // Show the code display container
+            generateCodeBtn.classList.add('hidden'); // Hide the generate button
+            qrDisplay.innerHTML = `<img src="${data.qr_code}" alt="QR Code for ${data.code}">`; // Display QR code image
             
-            // Update status
+            // Update status to indicate waiting for verification
             verificationStatus.textContent = 'Waiting for verification...';
-            verificationStatus.className = 'status-waiting';
+            verificationStatus.className = 'status-waiting'; // Apply waiting styling
         });
         
+        // Handle notification that verification has started
         socket.on('verification_started', (data) => {
-            if (data.code === currentCode) {
+            if (data.code === currentCode) { // Check if it matches the current code
                 verificationStatus.textContent = 'Verification in progress...';
-                verificationStatus.className = 'status-progress';
+                verificationStatus.className = 'status-progress'; // Apply in-progress styling
             }
         });
         
+        // Handle the final verification result from the server
         socket.on('verification_result', (data) => {
-            if (data.code === currentCode) {
+            if (data.code === currentCode) { // Check if it matches the current code
                 if (data.duress_detected) {
-                    verificationStatus.textContent = 'Duress Detected!\n!!! DO NOT PROCEED !!!';
-                    verificationStatus.className = 'status-duress';
+                    verificationStatus.textContent = 'Duress Detected!\n!!! DO NOT PROCEED !!!'; // Duress warning
+                    verificationStatus.className = 'status-duress'; // Apply duress styling
                 } else if (data.result === 'PASS') {
-                    verificationStatus.textContent = 'Verification PASSED';
-                    verificationStatus.className = 'status-success';
+                    verificationStatus.textContent = 'Verification PASSED'; // Success message
+                    verificationStatus.className = 'status-success'; // Apply success styling
                 } else {
-                    verificationStatus.textContent = 'Verification FAILED';
-                    verificationStatus.className = 'status-failed';
+                    verificationStatus.textContent = 'Verification FAILED'; // Failure message
+                    verificationStatus.className = 'status-failed'; // Apply failure styling
                 }
                 // Status persists; no auto-reset here
             }
         });
         
+        // Handle code-specific errors from the server
         socket.on('code_error', (data) => {
-            showVerifyError(data.message);
+            showVerifyError(data.message); // Display the error message
         });
     }
     
-    // Generate verification code
+    // Add click event listener to the generate code button
     generateCodeBtn.addEventListener('click', () => {
         console.log('Generate code button clicked');
-        if (socket && socket.connected) {
-            socket.emit('generate_code');
+        if (socket && socket.connected) { // Check if socket is already connected
+            socket.emit('generate_code'); // Request a new code from the server
         } else {
             console.error('Socket not connected');
-            initSocket();
-            setTimeout(() => {
+            initSocket(); // Initialize socket if not connected
+            setTimeout(() => { // Wait 1 second to ensure connection
                 if (socket && socket.connected) {
-                    socket.emit('generate_code');
+                    socket.emit('generate_code'); // Request a new code
                 } else {
                     console.error('Failed to reconnect socket');
                 }
@@ -2711,78 +3148,183 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
-    // Show verification error
+    // Function to display a verification error message
     function showVerifyError(message) {
-        verifyStatus.textContent = message;
-        verifyStatus.className = 'verify-status error';
+        verifyStatus.textContent = message; // Set the error message
+        verifyStatus.className = 'verify-status error'; // Apply error styling
         
+        // Clear the error message after 3 seconds
         setTimeout(() => {
             verifyStatus.textContent = '';
-            verifyStatus.className = 'verify-status';
+            verifyStatus.className = 'verify-status'; // Reset to default styling
         }, 3000);
     }
     
-    // Show verification success
+    // Function to display a verification success message
     function showVerifySuccess(message) {
-        verifyStatus.textContent = message;
-        verifyStatus.className = 'verify-status success';
+        verifyStatus.textContent = message; // Set the success message
+        verifyStatus.className = 'verify-status success'; // Apply success styling
         
+        // Clear the success message after 1 second
         setTimeout(() => {
             verifyStatus.textContent = '';
-            verifyStatus.className = 'verify-status';
+            verifyStatus.className = 'verify-status'; // Reset to default styling
         }, 1000);
     }
     
-    // Submit verification code
+    // Add click event listener to the submit code button
     submitCodeBtn.addEventListener('click', () => {
-        const code = codeInput.value.trim();
+        const code = codeInput.value.trim(); // Get and clean the entered code
         
+        // Validate the code format (6 digits)
         if (code.length !== 6 || !/^\d+$/.test(code)) {
-            showVerifyError('Please enter a valid 6-digit code');
+            showVerifyError('Please enter a valid 6-digit code'); // Show error if invalid
             return;
         }
         
-        submitCodeBtn.disabled = true;
-        submitCodeBtn.textContent = 'Checking...';
-        verifyStatus.textContent = 'Validating code...';
-        verifyStatus.className = 'verify-status info';
+        submitCodeBtn.disabled = true; // Disable the button during validation
+        submitCodeBtn.textContent = 'Checking...'; // Update button text
+        verifyStatus.textContent = 'Validating code...'; // Show validation in progress
+        verifyStatus.className = 'verify-status info'; // Apply info styling
         
+        // Send a fetch request to check the code validity
         fetch(`/check_code/${code}`)
             .then(response => {
-                if (!response.ok) {
+                if (!response.ok) { // Check if the response is not OK
                     throw new Error(`Server error: ${response.status}`);
                 }
-                return response.json();
+                return response.json(); // Parse the JSON response
             })
             .then(data => {
-                submitCodeBtn.disabled = false;
-                submitCodeBtn.textContent = 'Verify';
+                submitCodeBtn.disabled = false; // Re-enable the button
+                submitCodeBtn.textContent = 'Verify'; // Restore button text
                 
-                if (data.valid) {
-                    showVerifySuccess('Code valid! Redirecting...');
+                if (data.valid) { // If the code is valid
+                    showVerifySuccess('Code valid! Redirecting...'); // Show success message
                     setTimeout(() => {
-                        window.location.href = `/verify/${code}`;
+                        window.location.href = `/verify/${code}`; // Redirect to verification page
                     }, 1000);
                 } else {
-                    showVerifyError('Invalid code. Please check and try again.');
+                    showVerifyError('Invalid code. Please check and try again.'); // Show error if invalid
                 }
             })
-            .catch(error => {
+            .catch(error => { // Handle fetch errors
                 console.error('Error checking code:', error);
-                submitCodeBtn.disabled = false;
-                submitCodeBtn.textContent = 'Verify';
-                showVerifyError('Error checking code. Please try again.');
+                submitCodeBtn.disabled = false; // Re-enable the button
+                submitCodeBtn.textContent = 'Verify'; // Restore button text
+                showVerifyError('Error checking code. Please try again.'); // Show error message
             });
     });
     
-    // Handle Enter key in code input
+    // Add keypress event listener to the code input for Enter key
     codeInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            submitCodeBtn.click();
+        if (e.key === 'Enter') { // If Enter key is pressed
+            submitCodeBtn.click(); // Simulate a click on the submit button
         }
     });
     
-    // Initialize
+    // Initialize the socket connection when the script runs
     initSocket();
 });
+
+
+===== requirements.txt =====
+
+bidict==0.23.1
+blinker==1.9.0
+cffi==1.17.1
+click==8.1.8
+contourpy==1.3.1
+cycler==0.12.1
+dlib==19.24.6
+dnspython==2.7.0
+eventlet==0.39.0
+filelock==3.18.0
+Flask==3.1.0
+Flask-SocketIO==5.5.1
+fonttools==4.56.0
+fsspec==2025.3.0
+greenlet==3.1.1
+h11==0.14.0
+itsdangerous==2.2.0
+Jinja2==3.1.5
+kiwisolver==1.4.8
+MarkupSafe==3.0.2
+mpmath==1.3.0
+networkx==3.4.2
+numpy==2.2.3
+opencv-python==4.11.0.86
+packaging==24.2
+pillow==11.1.0
+pocketsphinx==5.0.4
+PyAudio==0.2.14
+pycparser==2.22
+pyparsing==3.2.1
+python-dateutil==2.9.0.post0
+python-engineio==4.11.2
+python-socketio==5.12.1
+qrcode==8.0
+setuptools==76.0.0
+simple-websocket==1.1.0
+six==1.17.0
+sounddevice==0.5.1
+SpeechRecognition==3.14.1
+sympy==1.13.1
+typing_extensions==4.12.2
+Werkzeug==3.1.3
+wsproto==1.2.0
+
+
+===== docker-compose.yml =====
+
+services:
+  facedetection:
+    build: .
+    container_name: facedetection
+    ports:
+      - "8001:8080"  # external:internal, so you can reach it at http://serverip:8001
+    environment:
+      # if you want to override config port, do: PORT=8001, etc.
+      - PORT=8080
+    restart: unless-stopped
+
+
+
+===== Dockerfile =====
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    pkg-config \
+    libx11-dev \
+    libgtk-3-dev \
+    libatlas-base-dev \
+    libjpeg-dev \
+    libpng-dev \
+    libavformat-dev \
+    libavcodec-dev \
+    libavdevice-dev \
+    libavfilter-dev \
+    libswscale-dev \
+    libv4l-dev \
+    libopenblas-dev \
+    liblapack-dev \
+    libpq-dev \
+    portaudio19-dev \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --upgrade pip setuptools wheel
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . /app
+
+EXPOSE 8080
+
+CMD ["python", "web_app.py"]
+
 
