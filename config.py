@@ -36,7 +36,8 @@ class Config:
     
     # Challenge parameters
     CHALLENGE_TIMEOUT = 10  # seconds
-    ACTION_SPEECH_WINDOW = 10.0  # seconds allowed between action and speech
+    ACTION_SPEECH_WINDOW = 1.5  # Time allowed between action and speech (seconds)
+    SPEECH_DEBOUNCE_TIME = 0.2  # Ignore repeat detections of same word within this time
     
     # Speech recognition parameters
     SPEECH_TIMEOUT = 10  # seconds
