@@ -18,8 +18,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let stableNetworkQuality = 'medium'; // Tracks the stable quality
     let lastQualityChangeTime = performance.now(); // Timestamp of last quality change
     const QUALITY_UPGRADE_DELAY = 5000; // Delay (5 sec) before upgrading
-    const qualityOrder = ['very_low', 'low', 'medium', 'high']; // Quality order for easy comparison
-
     
     // Create network status display element
     const networkStatusContainer = document.createElement('div');
@@ -514,6 +512,10 @@ document.addEventListener('DOMContentLoaded', () => {
             lastNetworkLogTime = now;
         }
          
+        const qualityOrder = ['very_low', 'low', 'medium', 'high'];
+        const currentQualityIndex = qualityOrder.indexOf(networkQuality);
+        const newQualityIndex = qualityOrder.indexOf(newQuality);
+
         if (newQualityIndex < currentQualityIndex) {
             // Immediate downgrade
             stableNetworkQuality = newQuality;
@@ -573,62 +575,66 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Capture a frame from the webcam and send it to the server
     function captureAndSendFrame() {
-        if (!isProcessing) {
-            console.log('Processing stopped, not capturing frame');
-            return; // Exit if not processing
-        }
-        
-        const now = performance.now();
-        const timeSinceLastFrame = now - lastFrameTime;
-        
-        // Check if enough time has passed since the last frame based on current frame interval
-        if (timeSinceLastFrame < currentFrameInterval) {
-            // Not enough time has passed, schedule next check
+        // Ensure the video is ready before attempting to capture
+        if (video.readyState < 2) {
             requestAnimationFrame(captureAndSendFrame);
             return;
         }
-        
-        // Update last frame time
+    
+        if (!isProcessing) {
+            console.log('Processing stopped, not capturing frame');
+            return;
+        }
+    
+        const now = performance.now();
+        const timeSinceLastFrame = now - lastFrameTime;
+    
+        if (timeSinceLastFrame < currentFrameInterval) {
+            requestAnimationFrame(captureAndSendFrame);
+            return;
+        }
+    
         lastFrameTime = now;
-        
+    
         try {
-            // Create an offscreen canvas to capture the video frame
             const offscreenCanvas = document.createElement('canvas');
             offscreenCanvas.width = video.videoWidth;
             offscreenCanvas.height = video.videoHeight;
             const offscreenCtx = offscreenCanvas.getContext('2d');
-            offscreenCtx.drawImage(video, 0, 0, offscreenCanvas.width, offscreenCanvas.height); // Draw video frame
-            
-            // Create a scaled version of the frame based on current resolution settings
+    
+            offscreenCtx.drawImage(video, 0, 0, offscreenCanvas.width, offscreenCanvas.height);
+    
             const scaledCanvas = createScaledFrame(
-                offscreenCanvas, 
-                currentResolution.width, 
+                offscreenCanvas,
+                currentResolution.width,
                 currentResolution.height
             );
-            
-            // Convert to JPEG with quality based on current settings
+    
             const imageData = scaledCanvas.toDataURL('image/jpeg', videoQuality);
-            
-            // Log frame sending every 30 frames in debug mode
+    
             if (isDebugMode && frameCount % 30 === 0) {
                 console.log(`Sending frame #${frameCount} (${currentResolution.width}x${currentResolution.height}, quality: ${videoQuality})`);
             }
-            
-            // Send the frame to the server with the session code and timestamp
+    
             socket.emit('process_frame', {
                 image: imageData,
                 code: sessionCode,
                 timestamp: now,
                 networkQuality: networkQuality,
-                detectionMode: blink_detection_active ? 'blink' : 
-                              action_detection_active ? 'action' : 'normal'
+                detectionMode: blink_detection_active ? 'blink' :
+                    action_detection_active ? 'action' : 'normal'
             });
-            frameCount++; // Increment frame counter
-            framesSinceLastFpsUpdate++; // Increment frames for FPS calculation
+    
+            frameCount++;
+            framesSinceLastFpsUpdate++;
         } catch (err) {
-            console.error('Error capturing frame:', err); // Log any errors
+            console.error('Error capturing frame:', err);
         }
+    
+        // Schedule the next frame
+        requestAnimationFrame(captureAndSendFrame);
     }
+    
 
     function applyQualitySettings(quality) {
         currentResolution = RESOLUTION_SETTINGS[quality];
