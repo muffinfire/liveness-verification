@@ -15,6 +15,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const videoContainer = document.querySelector('.video-container'); // Container for video and debug frame
     const processedFrameContainer = document.getElementById('processed-frame-container'); // Container for debug frame
     const sessionCode = document.getElementById('session-code').textContent; // Verification code from the HTML
+    let stableNetworkQuality = 'medium'; // Tracks the stable quality
+    let lastQualityChangeTime = performance.now(); // Timestamp of last quality change
+    const QUALITY_UPGRADE_DELAY = 5000; // Delay (5 sec) before upgrading
+    const qualityOrder = ['very_low', 'low', 'medium', 'high']; // Quality order for easy comparison
+
     
     // Create network status display element
     const networkStatusContainer = document.createElement('div');
@@ -291,7 +296,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         isProcessing = true; // Resume processing
                         frameTransmissionLatencies = []; // Reset again here to ensure fresh measurements
                         frameTransmissionTimes = [];
-                        
+
                         canvas.style.display = 'none'; // Hide the canvas
                         video.play(); // Resume the video
                         removeVideoEffect(); // Remove visual effect
@@ -361,19 +366,20 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Handle network quality update from server
         socket.on('network_quality', (data) => {
-            if (data.quality && data.quality !== networkQuality) {
-                networkQuality = data.quality;
-                console.log(`Server reported network quality: ${networkQuality}`);
-                
-                // Adjust video quality based on server-reported network quality
-                if (adaptiveQualityEnabled) {
-                    currentResolution = RESOLUTION_SETTINGS[networkQuality];
-                    videoQuality = currentResolution.quality;
-                    
-                    console.log(`Adjusted video settings based on server feedback: ${currentResolution.width}x${currentResolution.height}, quality: ${videoQuality}`);
-                }
+        if (data.quality && data.quality !== stableNetworkQuality) {
+            const serverQualityIndex = qualityOrder.indexOf(data.quality);
+            const clientQualityIndex = qualityOrder.indexOf(stableNetworkQuality);
+
+            if (serverQualityIndex < clientQualityIndex) {
+                stableNetworkQuality = data.quality;
+                lastQualityChangeTime = performance.now();
+                applyQualitySettings(data.quality);
+                console.log(`Server forced downgrade to: ${data.quality}`);
+            } else {
+                console.log(`Ignoring server upgrade recommendation (${data.quality}), awaiting client-side stability.`);
             }
-        });
+        }
+    });
         
         // Handle server errors
         socket.on('error', (data) => {
@@ -507,26 +513,22 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log(`Network stats: quality=${newQuality}, avg_time=${avgTime.toFixed(2)}ms, latency=${avgLatency.toFixed(2)}ms, est_bandwidth=${estimatedKbps}Kbps, actual_fps=${actualFps}`);
             lastNetworkLogTime = now;
         }
-        
-        // Update quality if changed
-        if (newQuality !== networkQuality) {
-            networkQuality = newQuality;
-            console.log(`Network quality updated to: ${networkQuality} (avg time: ${avgTime.toFixed(2)}ms, avg latency: ${avgLatency.toFixed(2)}ms)`);
-            
-            // Adjust video quality based on network quality if adaptive quality is enabled
-            if (adaptiveQualityEnabled) {
-                currentResolution = RESOLUTION_SETTINGS[networkQuality];
-                videoQuality = currentResolution.quality;
-                
-                console.log(`Adjusted video settings: ${currentResolution.width}x${currentResolution.height}, quality: ${videoQuality}`);
-                
-                // Inform server about client-detected network quality
-                if (socket && socket.connected) {
-                    socket.emit('client_network_quality', { 
-                        quality: networkQuality,
-                        latency: avgLatency
-                    });
-                }
+         
+        if (newQualityIndex < currentQualityIndex) {
+            // Immediate downgrade
+            stableNetworkQuality = newQuality;
+            lastQualityChangeTime = now;
+            applyQualitySettings(newQuality);
+            console.log(`Immediately downgraded quality to: ${newQuality}`);
+        } else if (newQualityIndex > currentQualityIndex) {
+            // Delay upgrades until stable
+            if (now - lastQualityChangeTime > QUALITY_UPGRADE_DELAY) {
+                stableNetworkQuality = newQuality;
+                lastQualityChangeTime = now;
+                applyQualitySettings(newQuality);
+                console.log(`Quality upgraded to: ${newQuality} after stability delay`);
+            } else {
+                console.log(`Delaying upgrade to ${newQuality}, waiting for stability...`);
             }
         }
     }
@@ -625,6 +627,19 @@ document.addEventListener('DOMContentLoaded', () => {
             framesSinceLastFpsUpdate++; // Increment frames for FPS calculation
         } catch (err) {
             console.error('Error capturing frame:', err); // Log any errors
+        }
+    }
+
+    function applyQualitySettings(quality) {
+        currentResolution = RESOLUTION_SETTINGS[quality];
+        videoQuality = currentResolution.quality;
+        networkQuality = quality; // update the active quality used elsewhere
+    
+        if (socket && socket.connected) {
+            socket.emit('client_network_quality', { 
+                quality: networkQuality,
+                latency: calculateAverageLatency()
+            });
         }
     }
     
