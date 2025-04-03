@@ -35,7 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const BLINK_FRAME_INTERVAL = 100 / BLINK_DETECTION_FPS; // Milliseconds between frames during blink detection
     const ACTION_FRAME_INTERVAL = 100 / ACTION_DETECTION_FPS; // Milliseconds between frames during action detection
     let currentFrameInterval = FRAME_INTERVAL; // Current interval between frames (can change based on detection mode)
-    let videoQuality = 0.3; // JPEG quality (0.0 to 1.0) for normal operation
+    let videoQuality = 0.1; // JPEG quality (0.0 to 1.0) for normal operation
     let blink_detection_active = true; // Flag to indicate if blink detection is currently active
     let action_detection_active = true; // Flag to indicate if action detection is currently active
     let networkQuality = 'low'; // Estimated network quality: 'high', 'medium', or 'low'
@@ -47,9 +47,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Video resolution settings
     const RESOLUTION_SETTINGS = {
-        high: { width: 640, height: 480, quality: 0.8 },
-        medium: { width: 480, height: 360, quality: 0.7 },
-        low: { width: 320, height: 240, quality: 0.6 }
+        high: { width: 640, height: 480, quality: 0.5 },
+        medium: { width: 480, height: 360, quality: 0.2 },
+        low: { width: 320, height: 240, quality: 0.1 }
     };
     let currentResolution = RESOLUTION_SETTINGS.medium; // Start with medium resolution
     

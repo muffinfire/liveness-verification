@@ -36,7 +36,7 @@ class Config:
     FACE_POSITION_HISTORY_LENGTH = 10      # Kept for responsiveness
         
     # History lengths for tracking
-    LANDMARK_HISTORY_MAX = 30  # Maximum frames to keep in landmark history
+    LANDMARK_HISTORY_MAX = 5  # Maximum frames to keep in landmark history
     
     # Blink detection parameters
     BLINK_THRESHOLD = 0.30  # EAR threshold for blink detection
