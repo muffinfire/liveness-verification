@@ -417,7 +417,5 @@ if __name__ == '__main__':
         app,
         host=config.HOST,
         port=config.PORT,
-        debug=config.BROWSER_DEBUG,
-        certfile=config.CERTFILE,
-        keyfile=config.KEYFILE
+        debug=config.BROWSER_DEBUG
     )
