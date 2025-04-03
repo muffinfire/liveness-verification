@@ -67,22 +67,22 @@ last_log_time = {}
 # Cache for encoded frames to reduce redundant processing
 frame_cache = {}
 FRAME_CACHE_SIZE = 30  # Maximum number of frames to cache (increased from 20)
-FRAME_CACHE_TTL = 10   # Time to live in seconds (increased from 5)
+FRAME_CACHE_TTL = 5   # Time to live in seconds (increased from 5)
 
 # JPEG encoding quality for different network conditions - UPDATED: reduced quality values
 JPEG_QUALITY = {
-    'high': 80,    # Reduced from 90
-    'medium': 60,  # Reduced from 80
-    'low': 40,     # Reduced from 70
+    'high': 30,    # Reduced from 90
+    'medium': 30,  # Reduced from 80
+    'low': 30,     # Reduced from 70
     'very_low': 30, # Reduced from 60
-    'ultra_low': 10 # New ultra-low setting
+    'ultra_low': 30 # New ultra-low setting
 }
 
 # Default network quality
 DEFAULT_NETWORK_QUALITY = 'medium'
 
 # Debug frame quality reduction factor
-DEBUG_QUALITY_REDUCTION = 15  # Reduce debug frame quality by this amount compared to main frame
+DEBUG_QUALITY_REDUCTION = 10  # Reduce debug frame quality by this amount compared to main frame
 
 # Network quality logging
 last_network_log_time = {}

@@ -42,14 +42,14 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Video optimization variables
     let lastFrameTime = 0; // Timestamp of the last frame sent
-    const TARGET_FPS = 15; // Target frames per second for normal operation
-    const BLINK_DETECTION_FPS = 30; // Higher FPS during blink detection to ensure accuracy
-    const ACTION_DETECTION_FPS = 20; // Medium FPS during action detection
+    const TARGET_FPS = 10; // Target frames per second for normal operation
+    const BLINK_DETECTION_FPS = 20; // Higher FPS during blink detection to ensure accuracy
+    const ACTION_DETECTION_FPS = 15; // Medium FPS during action detection
     const FRAME_INTERVAL = 100 / TARGET_FPS; // Milliseconds between frames at target FPS
     const BLINK_FRAME_INTERVAL = 100 / BLINK_DETECTION_FPS; // Milliseconds between frames during blink detection
     const ACTION_FRAME_INTERVAL = 100 / ACTION_DETECTION_FPS; // Milliseconds between frames during action detection
     let currentFrameInterval = FRAME_INTERVAL; // Current interval between frames (can change based on detection mode)
-    let videoQuality = 0.5; // JPEG quality (0.0 to 1.0) for normal operation
+    let videoQuality = 0.3; // JPEG quality (0.0 to 1.0) for normal operation
     let blink_detection_active = true; // Flag to indicate if blink detection is currently active
     let action_detection_active = true; // Flag to indicate if action detection is currently active
     let networkQuality = 'high'; // Estimated network quality: 'high', 'medium', or 'low'
@@ -68,11 +68,11 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Video resolution settings - UPDATED: added very_low and ultra_low settings
     const RESOLUTION_SETTINGS = {
-        high: { width: 640, height: 480, quality: 0.8 },
-        medium: { width: 480, height: 360, quality: 0.6 },
+        high: { width: 640, height: 480, quality: 0.3 },
+        medium: { width: 480, height: 360, quality: 0.3 },
         low: { width: 320, height: 240, quality: 0.3 },
-        very_low: { width: 240, height: 180, quality: 0.2 },
-        ultra_low: { width: 160, height: 120, quality: 0.1 }
+        very_low: { width: 240, height: 180, quality: 0.3 },
+        ultra_low: { width: 160, height: 120, quality: 0.3 }
     };
     let currentResolution = RESOLUTION_SETTINGS.medium; // Start with medium resolution
     
