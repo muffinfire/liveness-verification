@@ -72,10 +72,10 @@ FRAME_CACHE_TTL = 5   # Time to live in seconds (increased from 5)
 # JPEG encoding quality for different network conditions - UPDATED: reduced quality values
 JPEG_QUALITY = {
     'high': 70,
-    'medium': 50,
-    'low': 30,
-    'very_low': 20,
-    'ultra_low': 10
+    'medium': 70,
+    'low': 70,
+    'very_low': 70,
+    'ultra_low': 70
 }
 
 # Default network quality
