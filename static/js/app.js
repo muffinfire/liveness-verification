@@ -68,11 +68,11 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Video resolution settings - UPDATED: added very_low and ultra_low settings
     const RESOLUTION_SETTINGS = {
-        high: { width: 640, height: 480, quality: 0.5 },
-        medium: { width: 480, height: 360, quality: 0.2 },
-        low: { width: 320, height: 240, quality: 0.1 },
-        very_low: { width: 240, height: 180, quality: 0.05 },
-        ultra_low: { width: 160, height: 120, quality: 0.03 }
+        high: { width: 640, height: 480, quality: 0.8 },
+        medium: { width: 480, height: 360, quality: 0.6 },
+        low: { width: 320, height: 240, quality: 0.3 },
+        very_low: { width: 240, height: 180, quality: 0.2 },
+        ultra_low: { width: 160, height: 120, quality: 0.1 }
     };
     let currentResolution = RESOLUTION_SETTINGS.medium; // Start with medium resolution
     

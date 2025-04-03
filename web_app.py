@@ -72,10 +72,10 @@ FRAME_CACHE_TTL = 10   # Time to live in seconds (increased from 5)
 # JPEG encoding quality for different network conditions - UPDATED: reduced quality values
 JPEG_QUALITY = {
     'high': 80,    # Reduced from 90
-    'medium': 65,  # Reduced from 80
-    'low': 50,     # Reduced from 70
-    'very_low': 40, # Reduced from 60
-    'ultra_low': 30 # New ultra-low setting
+    'medium': 60,  # Reduced from 80
+    'low': 40,     # Reduced from 70
+    'very_low': 30, # Reduced from 60
+    'ultra_low': 10 # New ultra-low setting
 }
 
 # Default network quality
@@ -548,6 +548,9 @@ def handle_process_frame(data):
         if frame is not None:
             # Use appropriate JPEG quality based on network conditions
             jpeg_quality = JPEG_QUALITY.get(network_quality, JPEG_QUALITY[DEFAULT_NETWORK_QUALITY])
+
+            # Image format
+            image_format = 'jpeg'
             
             # Resize frame based on network quality
             frame = resize_frame_by_quality(frame, network_quality)
