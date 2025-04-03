@@ -79,7 +79,7 @@ JPEG_QUALITY = {
 }
 
 # Default network quality
-DEFAULT_NETWORK_QUALITY = 'medium'
+DEFAULT_NETWORK_QUALITY = 'ultra_low'
 
 # Debug frame quality reduction factor
 DEBUG_QUALITY_REDUCTION = 10  # Reduce debug frame quality by this amount compared to main frame
