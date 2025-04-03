@@ -231,6 +231,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Handle verification result when it's not pending
             if (data.verification_result !== 'PENDING') {
                 isProcessing = false; // Stop capturing new frames
+                frameTransmissionLatencies = []; // Reset latency stats to avoid skew
+                frameTransmissionTimes = [];
                 
                 // Set all status indicators to green checkmarks if verification passed
                 if (data.verification_result === 'PASS') {
@@ -287,6 +289,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Use a longer delay (3 seconds) to account for the transition animation
                     setTimeout(() => {
                         isProcessing = true; // Resume processing
+                        frameTransmissionLatencies = []; // Reset again here to ensure fresh measurements
+                        frameTransmissionTimes = [];
+                        
                         canvas.style.display = 'none'; // Hide the canvas
                         video.play(); // Resume the video
                         removeVideoEffect(); // Remove visual effect
@@ -336,6 +341,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     resultText.className = 'result-text failure';
                     resultContainer.classList.remove('hidden');
                     isProcessing = false;
+
+                    frameTransmissionLatencies = []; // Reset latency stats
+                    frameTransmissionTimes = [];
+
                     applyVideoEffect('failure');
                     setTimeout(() => window.location.href = '/', 3000); // Redirect after 3 seconds
                 } else {
@@ -640,9 +649,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 // --- Start Audio Processing ---
                 if (stream.getAudioTracks().length > 0) {
                     audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                    // Ensure the sample rate matches your PocketSphinx config (e.g., 16000)
-                    if (audioContext.sampleRate !== 16000) { 
-                        console.warn(`AudioContext sample rate (${audioContext.sampleRate}) doesn't match target (16000). Resampling might be needed or PocketSphinx config adjusted.`);
+                    // Ensure the sample rate matches your PocketSphinx config (e.g., 48000)
+                    if (audioContext.sampleRate !== 48000) { 
+                        console.warn(`AudioContext sample rate (${audioContext.sampleRate}) doesn't match target (48000). Resampling might be needed or PocketSphinx config adjusted.`);
                     }
                     
                     // log the audio sample rate
