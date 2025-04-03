@@ -597,12 +597,13 @@ document.addEventListener('DOMContentLoaded', () => {
         lastFrameTime = now;
     
         try {
+            const rect = video.getBoundingClientRect();
             const offscreenCanvas = document.createElement('canvas');
-            offscreenCanvas.width = video.videoWidth;
-            offscreenCanvas.height = video.videoHeight;
+            offscreenCanvas.width = rect.width;
+            offscreenCanvas.height = rect.height;
             const offscreenCtx = offscreenCanvas.getContext('2d');
-    
-            offscreenCtx.drawImage(video, 0, 0, offscreenCanvas.width, offscreenCanvas.height);
+            
+            offscreenCtx.drawImage(video, 0, 0, rect.width, rect.height);
     
             const scaledCanvas = createScaledFrame(
                 offscreenCanvas,
