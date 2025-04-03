@@ -4,9 +4,14 @@
     padding: 0;
 }
 
+/* GENERAL: Ensure images/videos scale correctly */
 video,
 img {
-    display: block;
+    display: block; /* Prevent extra space below */
+    max-width: 100%; /* Prevent overflow */
+    height: auto;    /* Allow height to adjust based on width/aspect-ratio */
+    object-fit: contain; /* Fit content within element bounds, preserving aspect ratio */
+    background-color: #000; /* Black background for letterboxing */
 }
 
 body {
@@ -44,12 +49,13 @@ h3 {
     letter-spacing: 0.5px;
 }
 
-/* Card layout for landing page */
+/* --- Card Layout (Landing Page) --- */
 .card-container {
     display: flex;
     justify-content: center;
     gap: 30px;
     margin-bottom: 40px;
+    flex-wrap: wrap; /* Allow wrapping on smaller screens */
 }
 
 .card {
@@ -91,7 +97,7 @@ input[type="tel"] {
     transition: border-color 0.3s;
 }
 
-input[type="text"],
+input[type="text"]:focus,
 input[type="tel"]:focus {
     border-color: #3498db;
 }
@@ -100,6 +106,7 @@ input[type="tel"]:focus {
     border-radius: 0 30px 30px 0;
 }
 
+/* --- Verification Code & QR --- */
 .verification-code {
     font-size: 36px;
     font-weight: bold;
@@ -112,459 +119,32 @@ input[type="tel"]:focus {
     text-align: center;
 }
 
-#qr-display > img {
-    margin-top: 15px;
-    max-width: 200px;
-    border-radius: 8px;
-    border: 1px solid #333;
-    object-fit: contain;
-    display: block;
-    margin: 0 auto;
-}
-
-.status-waiting {
-    padding: 10px;
-    color: #3498db;
-    background-color: rgba(73, 100, 251, 0.2);
-    border: 1px solid rgba(73, 100, 251, 0.3);
-    border-radius: 8px;
-    font-weight: 500;
-    margin-top: 20px;
-    margin-bottom: 20px;
-    text-align: center;
-    font-size: 20px;
-    transition: all 0.3s ease;
-}
-
-.status-progress {
-    padding: 10px;
-    color: #e0bd65;
-    background-color: rgba(248, 255, 48, 0.2); 
-    border: 1px solid rgba(248, 255, 48, 0.3);
-    border-radius: 8px;
-    font-weight: 500;
-    margin-top: 20px;
-    margin-bottom: 20px;
-    text-align: center;
-    font-size: 20px;
-    transition: all 0.3s ease;
-}
-
-.status-success {
-    padding: 10px;
-    color: #4cd137;
-    background-color: rgba(46, 204, 113, 0.2);
-    border: 1px solid rgba(46, 204, 113, 0.3);
-    border-radius: 8px;
-    font-weight: 500;
-    margin-top: 20px;
-    margin-bottom: 20px;
-    text-align: center;
-    font-size: 20px;
-    transition: all 0.3s ease;
-}
-
-.status-failed {
-    padding: 10px;
-    color: #e8603e;
-    background-color: rgba(231, 76, 60, 0.2);   
-    border: 1px solid rgba(231, 76, 60, 0.3);
-    border-radius: 8px;
-    font-weight: 500;
-    margin-top: 20px;
-    margin-bottom: 20px;
-    text-align: center;
-    font-size: 20px;
-    transition: all 0.3s ease;
-}
-
-.status-duress {
-    padding: 10px;
-    color: #ff0000;
-    background-color: rgba(231, 76, 60, 0.2);
-    border: 1px solid rgba(231, 76, 60, 0.3);
-    border-radius: 8px;
-    font-weight: 500;
-    margin-top: 20px;
-    margin-bottom: 20px;
-    text-align: center;
-    font-size: 20px;
-    white-space: pre-line;
-    transition: all 0.3s ease;
-}
-
-.session-info {
-    background-color: #1e1e1e;
-    padding: 10px 20px;
-    border-radius: 30px;
-    display: inline-block;
-    margin: 0 auto 20px;
-    text-align: center;
-    border: 1px solid #333;
-}
-
-.session-info p {
-    margin: 0;
-}
-
-#session-code {
-    font-weight: bold;
-    color: #3498db;
-    letter-spacing: 1px;
-}
-
-.footer {
-    text-align: center;
-    margin-top: 40px;
-    color: #666;
-    font-size: 14px;
-}
-
-/* Video container styles - MODIFIED */
-.video-container {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 20px;
-    gap: 20px;
-}
-
-.video-container.single-video {
-    justify-content: center;
-}
-
-/* MODIFIED: Added aspect-ratio to maintain 4:3 ratio */
-.video-wrapper {
-    position: relative;
-    width: 48%;
-    max-width: 640px;
-    border-radius: 12px;
+.video-qr-container {
+    position: relative; /* Crucial for overlay positioning */
+    width: 100%;
+    max-width: 300px; /* Adjust max size as needed */
+    aspect-ratio: 1 / 1; /* Maintain square aspect ratio */
+    margin: 20px auto;
     overflow: hidden;
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
-    aspect-ratio: 4/3;
+    border-radius: 8px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    background-color: #1a1a1a; /* Fallback background */
 }
 
-.single-video .video-wrapper {
-    width: 100%;
-    max-width: 640px;
-}
-
-/* MODIFIED: Changed height from auto to 100% and object-fit to contain for letterboxing */
-#webcam, #overlay {
-    width: 100%;
-    height: 100%;
-    border-radius: 12px;
-    object-fit: contain;
-    background-color: #000; /* Black background for letterboxing */
-}
-
-#overlay {
+.qr-video-background,
+.partner-video-frame { /* Style both possibilities */
     position: absolute;
     top: 0;
     left: 0;
-}
-
-/* MODIFIED: Added aspect-ratio to maintain 4:3 ratio */
-#processed-frame-container {
-    width: 48%;
-    aspect-ratio: 4/3;
-}
-
-/* MODIFIED: Changed height from auto to 100% and object-fit to contain for letterboxing */
-#processed-frame {
     width: 100%;
     height: 100%;
-    border-radius: 12px;
-    border: 1px solid #333;
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
-    object-fit: contain;
-    background-color: #000; /* Black background for letterboxing */
+    object-fit: cover; /* Cover container, cropping if needed */
+    z-index: 1;
 }
 
-.challenge-container {
-    background-color: #1e1e1e;
-    padding: 20px;
-    border-radius: 12px;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-    margin-bottom: 20px;
-    border: 1px solid #333;
-}
-
-.challenge-text {
-    font-size: 24px;
-    font-weight: 500;
-    text-align: center;
-    margin-bottom: 15px;
-    color: #ffffff;
-    letter-spacing: 0.5px;
-}
-
-.status-container {
-    display: flex;
-    justify-content: space-around;
-    background-color: #252525;
-    padding: 15px;
-    border-radius: 8px;
-}
-
-.status-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    font-size: 18px;
-}
-
-.status-item span:first-child {
-    color: #999;
-    margin-bottom: 5px;
-    font-size: 14px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-
-.result-container {
-    background-color: #1e1e1e;
-    padding: 25px;
-    border-radius: 12px;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-    margin-bottom: 20px;
-    text-align: center;
-    border: 1px solid #333;
-}
-
-.result-text {
-    font-size: 1.5rem;
-    font-weight: bold;
-    text-align: center;
-    padding: 1rem;
-    border-radius: 5px;
-    margin-bottom: 1rem;
-}
-
-.result-text.success {
-    background-color: rgba(46, 204, 113, 0.3);
-    color: #27ae60;
-}
-
-.result-text.failure {
-    background-color: rgba(231, 76, 60, 0.3);
-    color: #c0392b;
-}
-
-.result-text.duress {
-    background-color: rgba(230, 126, 34, 0.3);
-    color: #e67e22;
-}
-
-.button {
-    background-color: #2980b9;
-    color: white;
-    border: none;
-    padding: 12px 25px;
-    font-size: 16px;
-    border-radius: 30px;
-    cursor: pointer;
-    transition: all 0.3s;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    font-weight: 500;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-.button:hover {
-    background-color: #3498db;
-    transform: translateY(-2px);
-    box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
-}
-
-.button:active {
-    transform: translateY(0);
-}
-
-.instructions {
-    background-color: #1e1e1e;
-    padding: 20px;
-    border-radius: 12px;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-    border: 1px solid #333;
-}
-
-.instructions h2 {
-    margin-bottom: 15px;
-    color: #ffffff;
-    font-weight: 400;
-    letter-spacing: 0.5px;
-}
-
-.instructions p {
-    color: #bbb;
-    margin-bottom: 10px;
-    padding-left: 15px;
-    position: relative;
-}
-
-.instructions p:before {
-    content: "•";
-    position: absolute;
-    left: 0;
-    color: #3498db;
-}
-
-.hidden {
-    display: none;
-}
-
-/* MODIFIED: Mobile styles updated to maintain aspect ratio */
-@media (max-width: 768px) {
-    .card-container {
-        flex-direction: column;
-        align-items: center;
-    }
-    
-    .video-container {
-        flex-direction: column;
-        align-items: center;
-    }
-    
-    /* MODIFIED: Simplified mobile video styles with aspect ratio */
-    .video-wrapper, #processed-frame-container {
-        width: 100%;
-        margin: 0 auto;
-        aspect-ratio: 4/3;
-    }
-    
-    /* MODIFIED: Changed to use object-fit: contain for letterboxing */
-    #webcam, #debug-frame {
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-        background-color: #000; /* Black background for letterboxing */
-    }
-    
-    .challenge-text {
-        font-size: 20px;
-    }
-    
-    .status-item {
-        font-size: 16px;
-    }
-    
-    .video-container.double-video {
-        align-items: center;
-    }
-}
-
-.error-container {
-    background-color: #1e1e1e;
-    padding: 30px;
-    border-radius: 12px;
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
-    text-align: center;
-    border: 1px solid #333;
-    margin: 50px auto;
-    max-width: 500px;
-}
-
-.error-icon {
-    font-size: 68px;
-    color: #e74c3c;
-    margin-bottom: 20px;
-}
-
-.error-message {
-    font-size: 24px;
-    color: #ffffff;
-    margin-bottom: 30px;
-}
-
-.verify-status {
-    margin-top: 15px;
-    padding: 10px;
-    border-radius: 8px;
-    text-align: center;
-    font-weight: 500;
-    transition: all 0.3s ease;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.verify-status.error {
-    background-color: rgba(231, 76, 60, 0.2);
-    color: #e74c3c;
-    border: 1px solid rgba(231, 76, 60, 0.3);
-}
-
-.verify-status.success {
-    background-color: rgba(46, 204, 113, 0.2);
-    color: #2ecc71;
-    border: 1px solid rgba(46, 204, 113, 0.3);
-}
-
-.verify-status.info {
-    background-color: rgba(52, 152, 219, 0.2);
-    color: #3498db;
-    border: 1px solid rgba(52, 152, 219, 0.3);
-}
-
-/* Success/Failure/Duress overlay effects */
-.success-overlay .video-wrapper {
-    box-shadow: 0 0 20px 10px rgba(46, 204, 113, 0.6);
-    filter: sepia(0.2) saturate(1.5) brightness(1.1) hue-rotate(60deg);
-    border: 3px solid #2ecc71;
-    padding: 0;
-}
-
-.failure-overlay .video-wrapper {
-    box-shadow: 0 0 20px 10px rgba(231, 76, 60, 0.6);
-    filter: sepia(0.3) saturate(1.5) brightness(0.9) hue-rotate(-20deg);
-    border: 3px solid #e74c3c;
-    padding: 0;
-}
-
-.duress-overlay .video-wrapper {
-    box-shadow: 0 0 20px 10px rgba(230, 126, 34, 0.6);
-    filter: sepia(0.3) saturate(1.5) brightness(0.9) hue-rotate(10deg);
-    border: 3px solid #e67e22;
-    padding: 0;
-}
-
-/* Debug frame styles - MODIFIED */
-#debug-frame {
-    width: 100%;
-    height: 100%;
-    border-radius: 12px;
-    border: 1px solid #333;
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
-    object-fit: contain;
-    background-color: #000; /* Black background for letterboxing */
-}
-
-/* MODIFIED: Added aspect-ratio to maintain 4:3 ratio */
-#processed-frame-container, .video-wrapper {
-    width: 48%;
-    max-width: 640px;
-    aspect-ratio: 4/3;
-}
-
-/* QR code with video background styles */
-.video-qr-container {
-    position: relative;
-    width: 250px;
-    height: 250px;
-    margin: 0 auto;
-    overflow: hidden;
-    border-radius: 4px;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-    display: flex; /* Enable flexbox for centering */
-    justify-content: center; /* Center horizontally */
-    align-items: center; /* Center vertically */
-}
-
-.qr-video-background {
-    width: 100%;
-    height: 100%;
-    object-fit: cover; /* Keep this as cover for the background video */
+.partner-video-frame {
+    object-fit: contain; /* Partner frame should likely contain, not cover */
+    background-color: #000; /* Background for letterboxing */
 }
 
 .qr-overlay {
@@ -576,109 +156,205 @@ input[type="tel"]:focus {
     display: flex;
     justify-content: center;
     align-items: center;
-    opacity: 1;
-    transition: opacity 1s ease;
-    z-index: 2;
+    background-color: rgba(255, 255, 255, 0.85); /* Semi-transparent white background for QR */
+    z-index: 2; /* Ensure QR is above video */
+    padding: 10px; /* Add padding around QR code */
 }
 
 .qr-overlay img {
-    max-width: 90%; /* Changed to max-width to prevent overflow */
-    max-height: 90%;
+    width: 100%; /* Let the container padding control size */
+    height: 100%;
     object-fit: contain;
 }
 
-/* Partner video frame styles */
-.partner-video-frame {
-    width: 100%; /* Stretch to fill container width */
-    height: 100%; /* Stretch to fill container height */
-    object-fit: contain; /* Maintain aspect ratio, filling as much as possible */
-    object-position: center; /* Center the video content */
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%); /* Center it perfectly */
-    z-index: 1;
-}
-
-.partner-video-frame.duress {
-    background-color: rgba(255, 165, 0, 0.25); /* Orange tint overlay */
-    border: 3px solid #e67e22;
-}
-
-/* Add partner video label styles */
-.partner-video-label {
-    position: absolute;
-    top: 10px;
-    left: 0;
-    right: 0;
-    text-align: center;
-    background-color: rgba(0, 0, 0, 0.6);
-    color: white;
-    padding: 5px;
-    font-size: 14px;
-    z-index: 10;
-}
-
+.partner-video-label,
 .waiting-for-partner {
     position: absolute;
-    top: 50%;
-    left: 0;
-    right: 0;
+    bottom: 10px; /* Position at bottom */
+    left: 10px;
+    right: 10px;
     text-align: center;
-    transform: translateY(-50%);
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: rgba(0, 0, 0, 0.7);
     color: white;
-    padding: 10px;
-    font-size: 14px;
-    z-index: 5;
+    padding: 5px 10px;
+    font-size: 12px;
+    border-radius: 4px;
+    z-index: 3; /* Above QR overlay */
 }
-/* Base styles for video containers */
-.video-wrapper, #processed-frame-container, .partner-video-container {
-    position: relative;
-    width: 48%;
-    max-width: 640px;
+
+/* --- Status Indicators --- */
+.status-waiting, .status-progress, .status-success, .status-failed, .status-duress {
+    padding: 10px;
+    border-radius: 8px;
+    font-weight: 500;
+    margin: 20px 0;
+    text-align: center;
+    font-size: 18px; /* Reduced size slightly */
+    transition: all 0.3s ease;
+    border: 1px solid transparent;
+}
+
+.status-waiting { color: #3498db; background-color: rgba(52, 152, 219, 0.2); border-color: rgba(52, 152, 219, 0.3); }
+.status-progress { color: #e0bd65; background-color: rgba(241, 196, 15, 0.2); border-color: rgba(241, 196, 15, 0.3); }
+.status-success { color: #4cd137; background-color: rgba(46, 204, 113, 0.2); border-color: rgba(46, 204, 113, 0.3); }
+.status-failed { color: #e8603e; background-color: rgba(231, 76, 60, 0.2); border-color: rgba(231, 76, 60, 0.3); }
+.status-duress { color: #ff0000; background-color: rgba(231, 76, 60, 0.2); border-color: rgba(231, 76, 60, 0.3); white-space: pre-line; }
+
+
+/* --- Verify Page Specific --- */
+.session-info {
+    background-color: #1e1e1e;
+    padding: 10px 20px;
+    border-radius: 30px;
+    display: block; /* Make it block to center */
+    width: fit-content; /* Fit content width */
+    margin: 0 auto 20px;
+    text-align: center;
+    border: 1px solid #333;
+}
+.session-info p { margin: 0; }
+#session-code { font-weight: bold; color: #3498db; letter-spacing: 1px; }
+
+.video-section {
+    display: flex;
+    flex-direction: column; /* Stack vertically by default */
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+/* --- Containers for video elements --- */
+.video-wrapper,
+#processed-frame-container {
+    position: relative; /* Needed for overlay */
+    width: 100%;
+    max-width: 640px; /* Max width for larger screens */
     border-radius: 12px;
     overflow: hidden;
     box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
-    /* Maintain 4:3 aspect ratio in landscape mode */
-    aspect-ratio: 4/3;
-    background-color: #000;
+    border: 1px solid #333;
+    background-color: #000; /* Background for letterboxing */
 }
 
-/* Video elements */
-#webcam, #overlay, #debug-frame, #partner-video {
+/* Define aspect ratio for containers */
+.video-wrapper { aspect-ratio: 4 / 3; } /* Default landscape */
+#processed-frame-container { aspect-ratio: 4 / 3; } /* Default landscape */
+
+/* Portrait mode aspect ratio adjustment */
+.portrait-mode .video-wrapper,
+.portrait-mode #processed-frame-container {
+    aspect-ratio: 3 / 4 !important; /* Use !important cautiously if needed */
+}
+
+/* --- Video and Image Elements --- */
+#webcam,
+#overlay,
+#processed-frame,
+#debug-frame {
+    position: absolute; /* Position overlay */
+    top: 0;
+    left: 0;
     width: 100%;
-    height: 100%;
+    height: 100%; /* Fill the container */
+    object-fit: contain; /* Preserve aspect ratio within container */
+    border-radius: 12px; /* Match container */
+}
+
+#webcam, #processed-frame, #debug-frame {
+    position: relative; /* Reset position for these */
+}
+
+/* Challenge & Status */
+.challenge-container {
+    background-color: #1e1e1e;
+    padding: 20px;
     border-radius: 12px;
-    /* Use contain to maintain aspect ratio with letterboxing */
-    object-fit: contain;
-    background-color: #000;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    margin-bottom: 20px;
+    border: 1px solid #333;
+    text-align: center;
 }
+.challenge-text { font-size: 22px; font-weight: 500; color: #ffffff; letter-spacing: 0.5px; }
 
-/* Portrait mode specific styles */
-.portrait-mode {
-    /* Maintain 3:4 aspect ratio in portrait mode */
-    aspect-ratio: 3/4 !important;
+.status-container {
+    display: flex;
+    justify-content: space-around;
+    background-color: #252525;
+    padding: 15px;
+    border-radius: 8px;
+    margin-top: 15px;
 }
+.status-item { display: flex; flex-direction: column; align-items: center; font-size: 18px; }
+.status-item span:first-child { color: #999; margin-bottom: 5px; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
 
-/* Debug frame container */
-#processed-frame-container {
-    margin-top: 20px;
-    width: 100%;
-    max-width: 480px;
+/* Result & Reset */
+.result-container {
+    background-color: #1e1e1e;
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    margin-bottom: 20px;
+    text-align: center;
+    border: 1px solid #333;
 }
+.result-text { font-size: 1.5rem; font-weight: bold; text-align: center; padding: 1rem; border-radius: 5px; margin-bottom: 1rem; }
+.result-text.success { background-color: rgba(46, 204, 113, 0.3); color: #2ecc71; }
+.result-text.failure { background-color: rgba(231, 76, 60, 0.3); color: #e74c3c; }
+.result-text.duress { background-color: rgba(230, 126, 34, 0.3); color: #e67e22; }
 
-/* Partner video container */
-.partner-video-container {
-    margin: 20px auto;
-    width: 100%;
-    max-width: 480px;
+.button {
+    background-color: #2980b9; color: white; border: none;
+    padding: 12px 25px; font-size: 16px; border-radius: 30px; cursor: pointer;
+    transition: all 0.3s; text-transform: uppercase; letter-spacing: 1px; font-weight: 500;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); display: inline-block; /* Allow margin auto */
 }
+.button:hover { background-color: #3498db; transform: translateY(-2px); box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15); }
+.button:active { transform: translateY(0); }
+#reset-button { margin-top: 15px; }
 
-/* Media queries for mobile devices */
-@media (max-width: 768px) {
-    .video-wrapper, #processed-frame-container, .partner-video-container {
-        width: 100%;
-        margin: 10px auto;
+/* Instructions */
+.instructions { background-color: #1e1e1e; padding: 20px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2); border: 1px solid #333; margin-top: 20px;}
+.instructions h2 { margin-bottom: 15px; color: #ffffff; font-weight: 400; letter-spacing: 0.5px; }
+.instructions p { color: #bbb; margin-bottom: 10px; padding-left: 15px; position: relative; }
+.instructions p:before { content: "•"; position: absolute; left: 0; color: #3498db; }
+
+/* Error Page Styles */
+.error-container { background-color: #1e1e1e; padding: 30px; border-radius: 12px; box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3); text-align: center; border: 1px solid #333; margin: 50px auto; max-width: 500px; }
+.error-icon { font-size: 68px; color: #e74c3c; margin-bottom: 20px; }
+.error-message { font-size: 24px; color: #ffffff; margin-bottom: 30px; }
+
+/* Utility */
+.hidden { display: none !important; } /* Use important if needed to override */
+
+/* --- Responsive Adjustments --- */
+@media (min-width: 769px) {
+    /* Side-by-side layout for video/debug on larger screens */
+    .video-section {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: flex-start; /* Align items to top */
+    }
+    .video-wrapper,
+    #processed-frame-container {
+        width: 48%; /* Approx half width with gap */
+        max-width: 640px; /* Limit max width */
     }
 }
+
+@media (max-width: 768px) {
+    .card-container { flex-direction: column; align-items: center; }
+    .video-section { flex-direction: column; align-items: center; }
+    .video-wrapper, #processed-frame-container { width: 95%; max-width: 480px; /* Allow slightly wider on mobile */ }
+    .challenge-text { font-size: 18px; }
+    .status-item { font-size: 16px; }
+    h1 { font-size: 24px; }
+    .verification-code { font-size: 28px; }
+    .button { padding: 10px 20px; font-size: 14px; }
+}
+
+/* Verification Result Overlays */
+.success-overlay .video-wrapper, .success-overlay #processed-frame-container { box-shadow: 0 0 20px 10px rgba(46, 204, 113, 0.6); border: 3px solid #2ecc71; }
+.failure-overlay .video-wrapper, .failure-overlay #processed-frame-container { box-shadow: 0 0 20px 10px rgba(231, 76, 60, 0.6); border: 3px solid #e74c3c; }
+.duress-overlay .video-wrapper, .duress-overlay #processed-frame-container { box-shadow: 0 0 20px 10px rgba(230, 126, 34, 0.6); border: 3px solid #e67e22; }
+
+.footer { text-align: center; margin-top: 40px; color: #666; font-size: 14px; }

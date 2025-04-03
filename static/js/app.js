@@ -1,6 +1,3 @@
-// Modified version of app.js with fixes for debug and partner frames
-// This ensures all video frames maintain proper aspect ratio in both portrait and landscape modes
-
 // Global variables
 let socket;
 let webcam;
@@ -19,13 +16,12 @@ let resetButton;
 let sessionCode;
 let isProcessing = false;
 let verificationAttempts = 0;
-let frameTransmissionTimes = [];
-let frameTransmissionLatencies = [];
+let frameTransmissionLatencies = []; // For network quality estimation
 let lastNetworkCheckTime = 0;
 let currentNetworkQuality = 'medium'; // Default quality
-let stableNetworkQuality = 'medium';
+let stableNetworkQuality = 'medium'; // Quality confirmed by server or stable client calculation
 let lastQualityChangeTime = 0;
-let isPortrait = false; // Track device orientation
+let isPortrait = window.innerHeight > window.innerWidth; // Initial orientation check
 
 // Constants
 const MAX_VERIFICATION_ATTEMPTS = 3;
@@ -38,7 +34,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Get DOM elements
     webcam = document.getElementById('webcam');
     overlay = document.getElementById('overlay');
-    overlayContext = overlay.getContext('2d');
     processedFrame = document.getElementById('processed-frame');
     debugFrame = document.getElementById('debug-frame');
     challengeText = document.getElementById('challenge-text');
@@ -49,539 +44,571 @@ document.addEventListener('DOMContentLoaded', () => {
     resultContainer = document.getElementById('result-container');
     resultText = document.getElementById('result-text');
     resetButton = document.getElementById('reset-button');
-    sessionCode = document.getElementById('session-code').textContent;
-    
+    sessionCode = document.getElementById('session-code')?.textContent; // Use optional chaining
+
+    // Ensure required elements exist before proceeding
+    if (!webcam || !overlay || !processedFrame || !debugFrame || !sessionCode || !resetButton) {
+        console.error("One or more required elements not found in the DOM.");
+        // Optionally display an error to the user
+        return;
+    }
+
+    overlayContext = overlay.getContext('2d');
+
     // Initialize Socket.IO connection
     socket = io();
-    
-    // Check device orientation on load and when it changes
-    checkOrientation();
+
+    // Check device orientation on load and add listeners
+    checkOrientation(); // Initial check
     window.addEventListener('resize', checkOrientation);
-    
+    // More reliable orientation detection
+    if (window.screen && window.screen.orientation) {
+        window.screen.orientation.addEventListener('change', checkOrientation);
+    } else {
+        // Fallback for older browsers
+        window.addEventListener('orientationchange', checkOrientation);
+    }
+
+
     // Set up event listeners
     resetButton.addEventListener('click', resetVerification);
-    
+
     // Start the verification process
     initializeVerification();
 });
 
-// Check and update device orientation
+// Check and update device orientation, notify server, update CSS class
 function checkOrientation() {
-    const prevOrientation = isPortrait;
+    const previousOrientation = isPortrait;
     isPortrait = window.innerHeight > window.innerWidth;
-    
-    // If orientation changed, notify the server
-    if (prevOrientation !== isPortrait && socket) {
+
+    // Update body class for global CSS rules if needed (optional)
+    // document.body.classList.toggle('portrait-mode', isPortrait);
+    // document.body.classList.toggle('landscape-mode', !isPortrait);
+
+    // Update specific container classes for aspect ratio switching
+    const videoWrapper = document.querySelector('.video-wrapper');
+    const processedContainer = document.getElementById('processed-frame-container');
+
+    if (videoWrapper) videoWrapper.classList.toggle('portrait-mode', isPortrait);
+    if (processedContainer) processedContainer.classList.toggle('portrait-mode', isPortrait);
+
+
+    // Recalculate overlay size after orientation change (slight delay for rendering)
+    setTimeout(resizeOverlayCanvas, 100);
+
+    // Notify server if orientation changed
+    if (previousOrientation !== isPortrait && socket && socket.connected) {
         socket.emit('orientation_change', {
             isPortrait: isPortrait,
-            width: window.innerWidth,
-            height: window.innerHeight
+            width: window.innerWidth, // Viewport width
+            height: window.innerHeight // Viewport height
         });
         console.log(`Orientation changed to ${isPortrait ? 'portrait' : 'landscape'}`);
     }
-    
-    // Update CSS classes for debug and partner frames if needed
-    const processedFrameContainer = document.getElementById('processed-frame-container');
-    if (processedFrameContainer) {
-        if (isPortrait) {
-            processedFrameContainer.classList.add('portrait-mode');
-        } else {
-            processedFrameContainer.classList.remove('portrait-mode');
-        }
+}
+
+// Function to resize the overlay canvas based on webcam's displayed size
+function resizeOverlayCanvas() {
+     if (!webcam || !overlay || !overlayContext) return;
+
+    // Get the actual computed dimensions of the webcam element
+    const videoStyle = window.getComputedStyle(webcam);
+    const videoDisplayWidth = parseFloat(videoStyle.width);
+    const videoDisplayHeight = parseFloat(videoStyle.height);
+
+     // Check if dimensions are valid
+    if (videoDisplayWidth > 0 && videoDisplayHeight > 0) {
+        // Set overlay canvas size to match the DISPLAYED video size
+        overlay.width = videoDisplayWidth;
+        overlay.height = videoDisplayHeight;
+        console.log(`Overlay resized to: ${overlay.width}x${overlay.height}`);
+    } else {
+        // Fallback or wait if dimensions aren't ready
+        console.warn("Webcam dimensions not ready for overlay sizing.");
+         // Optionally try again after a short delay
+        // setTimeout(resizeOverlayCanvas, 200);
     }
 }
+
 
 // Initialize the verification process
 function initializeVerification() {
     // Request camera access
-    navigator.mediaDevices.getUserMedia({ 
-        video: { 
+    navigator.mediaDevices.getUserMedia({
+        video: {
+            // Request ideal resolution, browser will try to match
             width: { ideal: 640 },
             height: { ideal: 480 },
             facingMode: 'user'
-        }, 
-        audio: true 
+        },
+        audio: true // Request audio access
     })
     .then(stream => {
         webcam.srcObject = stream;
-        
-        // Set up canvas for overlay
-        overlay.width = webcam.videoWidth;
-        overlay.height = webcam.videoHeight;
-        overlay.style.display = 'block';
-        
-        // Wait for video to be ready
+
+        // Wait for video metadata to load to get dimensions
         webcam.onloadedmetadata = () => {
-            console.log(`Video dimensions: ${webcam.videoWidth}x${webcam.videoHeight}`);
-            
-            // Join the verification session
-            socket.emit('join_verification', { 
+            console.log(`Native video dimensions: ${webcam.videoWidth}x${webcam.videoHeight}`);
+
+            // Initial resize of overlay canvas
+            resizeOverlayCanvas();
+
+            // Make overlay visible and position it (ensure parent has position: relative)
+            overlay.style.display = 'block';
+            overlay.style.position = 'absolute';
+            overlay.style.top = '0';
+            overlay.style.left = '0';
+
+             // Join the verification session
+            socket.emit('join_verification', {
                 code: sessionCode,
                 clientInfo: {
                     userAgent: navigator.userAgent,
                     screenWidth: window.screen.width,
                     screenHeight: window.screen.height,
-                    isPortrait: isPortrait
+                    isPortrait: isPortrait, // Send initial orientation
+                    // Add any other relevant info
                 }
             });
-            
-            // Request debug status
+
+            // Request debug status (optional)
             socket.emit('get_debug_status');
-            
+
             // Start processing frames
             isProcessing = true;
             requestAnimationFrame(captureAndSendFrame);
-            
-            // Set up audio processing if needed
+
+            // Set up audio processing
             setupAudioProcessing(stream);
         };
+
+        webcam.onplay = () => {
+             // Ensure overlay is resized again once video starts playing
+             resizeOverlayCanvas();
+        };
+
     })
     .catch(error => {
-        console.error('Error accessing camera:', error);
-        alert('Camera access is required for verification. Please allow access and try again.');
+        console.error('Error accessing camera/microphone:', error);
+        // Display a user-friendly error message
+        const errorMsg = 'Camera and microphone access are required for verification. Please allow access and refresh the page.';
+        if (resultContainer && resultText) {
+            resultText.textContent = errorMsg;
+            resultText.className = 'result-text failure';
+            resultContainer.classList.remove('hidden');
+            resetButton.classList.add('hidden'); // Hide reset button
+        } else {
+            alert(errorMsg);
+        }
     });
-    
+
     // Set up Socket.IO event handlers
     setupSocketHandlers();
 }
 
 // Set up Socket.IO event handlers
 function setupSocketHandlers() {
-    // Handle connection event
-    socket.on('connect', () => {
-        console.log('Connected to server');
+    socket.on('connect', () => console.log('Connected to server'));
+    socket.on('disconnect', () => {
+        console.log('Disconnected from server');
+        isProcessing = false;
+        alert('Disconnected from server. Please refresh the page to reconnect.');
     });
-    
-    // Handle challenge event
+
     socket.on('challenge', (data) => {
-        challengeText.textContent = data.text;
+        if (challengeText) challengeText.textContent = data.text;
         resetStatusIndicators();
     });
-    
-    // Handle debug status event
+
     socket.on('debug_status', (data) => {
-        if (data.debug && data.showDebugFrame) {
-            document.getElementById('processed-frame-container').classList.remove('hidden');
-            debugFrame.classList.remove('hidden');
+        // Show/hide debug frame container based on server config
+        const debugContainer = document.getElementById('processed-frame-container'); // Assuming debug is inside this
+        if (debugContainer) {
+             debugContainer.classList.toggle('hidden', !(data.debug && data.showDebugFrame));
         }
     });
-    
-    // Handle processed frame event
+
     socket.on('processed_frame', (data) => {
-        // Update challenge status
-        if (data.challenge) {
+        if (!isProcessing && data.verification_result === 'PENDING') {
+             // Avoid processing frames if we are already showing a final result
+             console.log("Ignoring frame, verification already concluded.");
+             return;
+        }
+
+        // Update challenge status if provided
+        if (data.challenge && challengeText) {
             challengeText.textContent = data.challenge;
         }
-        
+
         // Update status indicators
-        actionStatus.innerHTML = data.action_completed ? '✅' : '❌';
-        wordStatus.innerHTML = data.word_completed ? '✅' : '❌';
-        blinkStatus.innerHTML = data.blink_completed ? '✅' : '❌';
-        timeRemaining.textContent = `${Math.ceil(data.time_remaining)}s`;
-        
-        // Calculate latency
+        if (actionStatus) actionStatus.innerHTML = data.action_completed ? '✅' : '❌';
+        if (wordStatus) wordStatus.innerHTML = data.word_completed ? '✅' : '❌';
+        if (blinkStatus) blinkStatus.innerHTML = data.blink_completed ? '✅' : '❌';
+        if (timeRemaining) timeRemaining.textContent = `${Math.ceil(data.time_remaining)}s`;
+
+        // Calculate latency for network quality estimation
         if (data.timestamp) {
             const latency = performance.now() - data.timestamp;
-            if (frameTransmissionLatencies.length >= 10) {
-                frameTransmissionLatencies.shift();
+            if (!isNaN(latency)){ // Ensure latency is a number
+                 frameTransmissionLatencies.push(latency);
+                 if (frameTransmissionLatencies.length > 10) {
+                      frameTransmissionLatencies.shift(); // Keep last 10 values
+                 }
             }
-            frameTransmissionLatencies.push(latency);
         }
-        
-        // Update processed frame if available
-        if (data.image) {
+
+        // Update processed frame image
+        if (data.image && processedFrame) {
             processedFrame.src = data.image;
+        } else if (processedFrame) {
+             // Optionally clear or show a placeholder if no image received
+             // processedFrame.src = 'placeholder.jpg';
         }
-        
-        // Update debug frame if available
-        if (data.debug_image) {
+
+        // Update debug frame image
+        if (data.debug_image && debugFrame) {
             debugFrame.src = data.debug_image;
+        } else if (debugFrame) {
+             // Optionally clear or hide
+             // debugFrame.src = '';
         }
-        
+
         // Handle verification result
         if (data.exit_flag && data.verification_result !== 'PENDING') {
-            isProcessing = false; // Stop processing
-            
+            isProcessing = false; // Stop processing further frames
+
+            let message = '';
+            let resultClass = '';
+            let effectClass = '';
+
             if (data.verification_result === 'PASS') {
-                resultText.textContent = 'Verification Successful!';
-                resultText.className = 'result-text success';
-                applyVideoEffect('success');
-            } else if (data.verification_result === 'FAIL') {
-                if (data.duress_detected) {
-                    resultText.textContent = 'Duress Detected! Verification Failed.';
-                    resultText.className = 'result-text duress';
-                    applyVideoEffect('duress');
-                } else {
-                    resultText.textContent = 'Verification Failed!';
-                    resultText.className = 'result-text failure';
-                    applyVideoEffect('failure');
-                }
+                message = 'Verification Successful!';
+                resultClass = 'success';
+                effectClass = 'success';
+            } else { // FAIL or DURESS treated as failure for display
+                 if (data.duress_detected) {
+                      message = 'Duress Detected! Verification Failed.';
+                      resultClass = 'duress'; // Specific class for duress text styling
+                      effectClass = 'duress'; // Specific class for video effect
+                 } else {
+                      message = 'Verification Failed!';
+                      resultClass = 'failure';
+                      effectClass = 'failure';
+                 }
+                 verificationAttempts++; // Count failed attempts
+                 console.log(`Verification attempt ${verificationAttempts} failed.`);
             }
-            
-            resultContainer.classList.remove('hidden');
-            
-            // Reset stats
+
+            if (resultText) resultText.textContent = message;
+            if (resultText) resultText.className = `result-text ${resultClass}`;
+            if (resultContainer) resultContainer.classList.remove('hidden');
+            applyVideoEffect(effectClass); // Apply visual effect
+
+            // Reset network stats
             frameTransmissionLatencies = [];
-            frameTransmissionTimes = [];
-            
-            // Add delay before redirect on success
-            if (data.verification_result === 'PASS') {
-                setTimeout(() => {
-                    removeVideoEffect(); // Remove visual effect
-                    
-                    // Update challenge text to indicate transition
-                    challengeText.textContent = 'Preparing new challenge...';
-                    
-                    // Add additional delay before starting the next challenge to compensate for animation time
-                    setTimeout(() => {
-                        requestAnimationFrame(captureAndSendFrame); // Start capturing frames again
-                    }, 2000); // Additional 2 second delay before starting next challenge
-                }, 1000); // Initial 1 second delay
-            }
+            lastNetworkCheckTime = 0;
+
+            // Check for max attempts
+             if (verificationAttempts >= MAX_VERIFICATION_ATTEMPTS && data.verification_result !== 'PASS') {
+                 if (resultText) resultText.textContent += ` Maximum attempts (${MAX_VERIFICATION_ATTEMPTS}) reached.`;
+                 // Optionally redirect after a delay
+                 // setTimeout(() => window.location.href = '/', 5000);
+             } else if (data.verification_result !== 'PASS') {
+                  // Allow reset if attempts remain
+                  if(resetButton) resetButton.classList.remove('hidden');
+             } else {
+                 // Hide reset button on success
+                 if (resetButton) resetButton.classList.add('hidden');
+                 // Optionally redirect on success after delay
+                  // setTimeout(() => window.location.href = '/success_page', 3000);
+             }
+
+
         } else if (isProcessing) {
-            // Calculate frame transmission time for network quality estimation
+            // Continue processing: Estimate network quality periodically
             const now = performance.now();
-            if (frameTransmissionTimes.length > 0) {
-                const lastTransmissionTime = frameTransmissionTimes[frameTransmissionTimes.length - 1];
-                const transmissionTime = now - lastTransmissionTime;
-                
-                // Keep only the last 10 transmission times
-                if (frameTransmissionTimes.length >= 10) {
-                    frameTransmissionTimes.shift();
-                }
-                frameTransmissionTimes.push(now);
-                
-                // Check network quality periodically
-                if (now - lastNetworkCheckTime > NETWORK_CHECK_INTERVAL) {
-                    updateNetworkQuality();
-                    lastNetworkCheckTime = now;
-                }
-            } else {
-                frameTransmissionTimes.push(now);
+            if (now - lastNetworkCheckTime > NETWORK_CHECK_INTERVAL) {
+                updateNetworkQuality();
+                lastNetworkCheckTime = now;
             }
-            
-            requestAnimationFrame(captureAndSendFrame); // Continue capturing if still processing
-        }
-        
-        // Handle timeout when time runs out but result is still pending
-        if (data.time_remaining <= 0 && data.verification_result === 'PENDING') {
-            socket.emit('reset', { code: sessionCode }); // Request a reset from the server
-            verificationAttempts++; // Increment attempt counter
-            
-            if (verificationAttempts >= MAX_VERIFICATION_ATTEMPTS) {
-                // If max attempts reached, show failure and redirect
-                resultText.textContent = 'Maximum attempts reached. Verification failed.';
-                resultText.className = 'result-text failure';
-                resultContainer.classList.remove('hidden');
-                isProcessing = false;
-
-                frameTransmissionLatencies = []; // Reset latency stats
-                frameTransmissionTimes = [];
-
-                applyVideoEffect('failure');
-                setTimeout(() => window.location.href = '/', 3000); // Redirect after 3 seconds
-            } else {
-                // Show attempt number and wait for new challenge
-                challengeText.textContent = `Attempt ${verificationAttempts + 1} of ${MAX_VERIFICATION_ATTEMPTS}...`;
-                setTimeout(() => {
-                    challengeText.textContent = 'Waiting for new challenge...';
-                    isProcessing = true;
-                    requestAnimationFrame(captureAndSendFrame); // Resume frame capture
-                }, 2000); // Wait 2 seconds before resuming
-            }
+            // Request next frame
+            requestAnimationFrame(captureAndSendFrame);
         }
     });
-    
-    // Handle network quality update from server
+
     socket.on('network_quality', (data) => {
+        // Handle network quality suggestions from the server (e.g., force downgrade)
         if (data.quality && data.quality !== stableNetworkQuality) {
             const serverQualityIndex = qualityOrder.indexOf(data.quality);
             const clientQualityIndex = qualityOrder.indexOf(stableNetworkQuality);
 
+            // Server can force a downgrade immediately
             if (serverQualityIndex < clientQualityIndex) {
+                console.log(`Server forced network quality downgrade to: ${data.quality}`);
                 stableNetworkQuality = data.quality;
+                currentNetworkQuality = data.quality; // Apply immediately
                 lastQualityChangeTime = performance.now();
-                applyQualitySettings(data.quality);
-                console.log(`Server forced downgrade to: ${data.quality}`);
+                applyQualitySettings(data.quality); // Optional: apply client-side settings
             } else {
-                console.log(`Ignoring server upgrade recommendation (${data.quality}), awaiting client-side stability.`);
+                // Server might suggest an upgrade, but client decides based on stability
+                console.log(`Server suggested quality: ${data.quality}. Client maintaining: ${stableNetworkQuality}`);
             }
         }
     });
-    
-    // Handle server errors
+
+    socket.on('session_error', (data) => {
+         console.error('Session error:', data.message);
+         isProcessing = false;
+         if (resultText) resultText.textContent = `Error: ${data.message}. Please try again or generate a new code.`;
+         if (resultText) resultText.className = 'result-text failure';
+         if (resultContainer) resultContainer.classList.remove('hidden');
+         if (resetButton) resetButton.classList.add('hidden');
+    });
+
+
     socket.on('error', (data) => {
         console.error('Server error:', data.message);
-        alert('Server error: ' + data.message); // Alert the user
+        alert('An unexpected error occurred: ' + data.message);
+        isProcessing = false;
     });
-    
-    // Handle max attempts reached event from server
+
     socket.on('max_attempts_reached', () => {
-        isProcessing = false; // Stop processing
-        resultText.textContent = 'Maximum verification attempts reached.';
-        resultContainer.classList.remove('hidden');
+        console.log("Max attempts reached signal from server.");
+        isProcessing = false;
+        if (resultText) resultText.textContent = `Maximum verification attempts (${MAX_VERIFICATION_ATTEMPTS}) reached. Verification failed.`;
+        if (resultText) resultText.className = 'result-text failure';
+        if (resultContainer) resultContainer.classList.remove('hidden');
+        if (resetButton) resetButton.classList.add('hidden');
         applyVideoEffect('failure');
-        setTimeout(() => window.location.href = '/', 5000); // Redirect after 5 seconds
+        // Optionally redirect after a delay
+        // setTimeout(() => window.location.href = '/', 5000);
     });
-    
-    // Handle disconnection from the server
-    socket.on('disconnect', () => {
-        console.log('Disconnected from server');
-        isProcessing = false; // Stop processing
-        alert('Disconnected from server. Please refresh the page to reconnect.');
-    });
-    
-    // Handle reset confirmation from server
+
     socket.on('reset_confirmed', () => {
         console.log('Reset confirmed by server');
         resetStatusIndicators();
+        if (challengeText) challengeText.textContent = "Waiting for new challenge...";
+        if (resultContainer) resultContainer.classList.add('hidden'); // Hide previous result
+        if (resetButton) resetButton.classList.add('hidden'); // Hide reset button until next failure
+        removeVideoEffect(); // Remove visual effect
+        isProcessing = true; // Re-enable processing
+        requestAnimationFrame(captureAndSendFrame); // Start capturing again
     });
-    
-    // Handle partner video frame
-    socket.on('partner_video_frame', (data) => {
-        // If we have a partner video element, update it
-        const partnerVideo = document.getElementById('partner-video');
-        if (partnerVideo && data.image) {
-            partnerVideo.src = data.image;
-            
-            // Update partner video container with orientation class if needed
-            const partnerContainer = partnerVideo.parentElement;
-            if (partnerContainer) {
-                if (data.isPortrait) {
-                    partnerContainer.classList.add('portrait-mode');
-                } else {
-                    partnerContainer.classList.remove('portrait-mode');
-                }
-            }
-        }
-    });
+
+    // Note: Partner video frame updates are handled by landing.js
 }
 
-// Capture and send a frame to the server
+// Capture frame, draw to overlay, send to server
 function captureAndSendFrame() {
-    if (!isProcessing || !webcam.videoWidth) return;
-    
+    // Stop if not processing, or webcam/overlay not ready
+    if (!isProcessing || !webcam || !webcam.videoWidth || !overlay || !overlayContext) {
+        // If processing should be active but elements aren't ready, maybe retry shortly
+        if (isProcessing) {
+             console.warn("captureAndSendFrame called but elements not ready. Retrying shortly.");
+             setTimeout(() => requestAnimationFrame(captureAndSendFrame), 100); // Retry after 100ms
+        }
+        return;
+    }
+
     try {
-        // Draw the current frame to the canvas
+        // Ensure overlay matches webcam display size before drawing
+        if (overlay.width !== webcam.clientWidth || overlay.height !== webcam.clientHeight) {
+             resizeOverlayCanvas();
+             // Wait a frame for resize to apply before drawing
+             requestAnimationFrame(captureAndSendFrame);
+             return;
+        }
+
+        // Draw the current webcam frame onto the overlay canvas
+        // This canvas content is what gets sent
         overlayContext.drawImage(webcam, 0, 0, overlay.width, overlay.height);
-        
-        // Get the frame data as a data URL
-        const frameData = overlay.toDataURL('image/jpeg', 0.7);
-        
-        // Send the frame to the server
+
+        // Get frame data with dynamic quality based on network estimation
+        const jpegQuality = getJpegQualityForNetwork(currentNetworkQuality);
+        const frameData = overlay.toDataURL('image/jpeg', jpegQuality);
+
+        // Send frame data along with metadata
         socket.emit('process_frame', {
             image: frameData,
             code: sessionCode,
-            timestamp: performance.now(),
-            networkQuality: currentNetworkQuality,
-            isPortrait: isPortrait,
-            detectionMode: 'normal'
+            timestamp: performance.now(), // Timestamp for latency calculation
+            networkQuality: currentNetworkQuality, // Inform server of client's perceived quality
+            isPortrait: isPortrait, // Send current orientation
+            // detectionMode: 'normal' // Example: Add if needed
         });
+
     } catch (error) {
-        console.error('Error capturing frame:', error);
+        console.error('Error capturing/sending frame:', error);
+        // Optionally try to recover or stop processing
+        // isProcessing = false;
+        // alert("An error occurred while capturing video.");
     }
 }
 
-// Set up audio processing
-function setupAudioProcessing(stream) {
-    // Create audio context
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const source = audioContext.createMediaStreamSource(stream);
-    const processor = audioContext.createScriptProcessor(4096, 1, 1);
-    
-    // Connect the processor
-    source.connect(processor);
-    processor.connect(audioContext.destination);
-    
-    // Process audio data
-    processor.onaudioprocess = (e) => {
-        if (!isProcessing) return;
-        
-        // Get audio data
-        const inputData = e.inputBuffer.getChannelData(0);
-        
-        // Convert to 16-bit PCM
-        const pcmData = new Int16Array(inputData.length);
-        for (let i = 0; i < inputData.length; i++) {
-            pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
-        }
-        
-        // Send audio chunk to server
-        socket.emit('audio_chunk', {
-            audio: arrayBufferToBase64(pcmData.buffer)
-        });
-    };
+// Determine JPEG quality based on network estimation
+function getJpegQualityForNetwork(quality) {
+     // Map quality string to a numerical JPEG quality value (0.0 to 1.0)
+     // Adjust these values based on testing for performance/visuals
+    switch (quality) {
+        case 'high': return 0.8; // Higher quality
+        case 'medium': return 0.65; // Default/Medium quality
+        case 'low': return 0.5; // Lower quality
+        case 'very_low': return 0.35; // Very low quality
+        default: return 0.65; // Fallback to medium
+    }
 }
 
-// Convert ArrayBuffer to Base64
+// Set up audio processing (if needed)
+function setupAudioProcessing(stream) {
+    try {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const source = audioContext.createMediaStreamSource(stream);
+        // Use a smaller buffer size for potentially lower latency, adjust if needed
+        const processor = audioContext.createScriptProcessor(2048, 1, 1);
+
+        source.connect(processor);
+        processor.connect(audioContext.destination); // Connect to destination to avoid issues
+
+        processor.onaudioprocess = (e) => {
+            if (!isProcessing) return;
+
+            const inputData = e.inputBuffer.getChannelData(0);
+
+            // Basic silence detection (optional) - adjust threshold
+            let sum = 0;
+            for (let i = 0; i < inputData.length; i++) {
+                 sum += Math.abs(inputData[i]);
+            }
+            const avg = sum / inputData.length;
+            if (avg < 0.005) { // If average amplitude is very low, don't send
+                 // console.log("Audio below threshold, skipping send.");
+                 return;
+            }
+
+
+            // Convert to 16-bit PCM
+            const buffer = new ArrayBuffer(inputData.length * 2);
+            const view = new DataView(buffer);
+            for (let i = 0; i < inputData.length; i++) {
+                const s = Math.max(-1, Math.min(1, inputData[i]));
+                view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+            }
+
+            // Send audio chunk to server (consider base64 encoding if needed by server)
+            socket.emit('audio_chunk', {
+                 code: sessionCode, // Include session code
+                 audio: buffer // Send ArrayBuffer directly if socket.io handles binary
+                 // audio: arrayBufferToBase64(buffer) // Or send base64
+            });
+        };
+         console.log("Audio processing setup complete.");
+
+    } catch (error) {
+        console.error("Failed to setup audio processing:", error);
+        // Inform user or disable audio features if essential
+        // alert("Could not initialize audio processing.");
+    }
+}
+
+// Convert ArrayBuffer to Base64 (if sending base64)
 function arrayBufferToBase64(buffer) {
-    const bytes = new Uint8Array(buffer);
     let binary = '';
-    for (let i = 0; i < bytes.byteLength; i++) {
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
         binary += String.fromCharCode(bytes[i]);
     }
     return window.btoa(binary);
 }
 
-// Reset status indicators
+
+// Reset status indicators (checkmark/cross)
 function resetStatusIndicators() {
-    actionStatus.innerHTML = '❌';
-    wordStatus.innerHTML = '❌';
-    blinkStatus.innerHTML = '❌';
+    if (actionStatus) actionStatus.innerHTML = '❌';
+    if (wordStatus) wordStatus.innerHTML = '❌';
+    if (blinkStatus) blinkStatus.innerHTML = '❌';
 }
 
-// Reset verification
+// Handle reset button click
 function resetVerification() {
-    socket.emit('reset', { code: sessionCode });
-    resultContainer.classList.add('hidden');
-    isProcessing = true;
-    removeVideoEffect();
-    requestAnimationFrame(captureAndSendFrame);
+    console.log("Reset verification requested by user.");
+    if (verificationAttempts >= MAX_VERIFICATION_ATTEMPTS) {
+        alert(`Maximum verification attempts (${MAX_VERIFICATION_ATTEMPTS}) reached.`);
+        return;
+    }
+    if (socket && socket.connected) {
+        socket.emit('reset', { code: sessionCode });
+        // UI updates will be handled by 'reset_confirmed' event
+    } else {
+        alert("Not connected to server. Cannot reset.");
+    }
 }
 
-// Update network quality based on latency
+// Update network quality based on calculated latency
 function updateNetworkQuality() {
-    if (frameTransmissionLatencies.length === 0) return;
-    
-    // Calculate average latency
+    if (frameTransmissionLatencies.length < 5) return; // Need a few samples
+
     const avgLatency = frameTransmissionLatencies.reduce((a, b) => a + b, 0) / frameTransmissionLatencies.length;
-    
-    // Determine quality level based on latency
+
     let newQuality;
-    if (avgLatency > 500) {
-        newQuality = 'very_low';
-    } else if (avgLatency > 300) {
-        newQuality = 'low';
-    } else if (avgLatency > 150) {
-        newQuality = 'medium';
-    } else {
-        newQuality = 'high';
-    }
-    
-    // Only upgrade quality if it's been stable for a while
+    // Adjust latency thresholds based on testing
+    if (avgLatency > 600) newQuality = 'very_low';
+    else if (avgLatency > 400) newQuality = 'low';
+    else if (avgLatency > 200) newQuality = 'medium';
+    else newQuality = 'high';
+
     const now = performance.now();
     const timeSinceLastChange = now - lastQualityChangeTime;
-    
-    if (qualityOrder.indexOf(newQuality) > qualityOrder.indexOf(currentNetworkQuality)) {
-        // Upgrading quality requires stability
+    const currentQualityIndex = qualityOrder.indexOf(currentNetworkQuality);
+    const newQualityIndex = qualityOrder.indexOf(newQuality);
+
+    let qualityChanged = false;
+
+    if (newQualityIndex > currentQualityIndex) {
+        // Upgrade requires stability
         if (timeSinceLastChange > QUALITY_STABILITY_THRESHOLD) {
             currentNetworkQuality = newQuality;
-            lastQualityChangeTime = now;
-            console.log(`Network quality upgraded to: ${newQuality} (Latency: ${avgLatency.toFixed(0)}ms)`);
+            qualityChanged = true;
         }
-    } else if (qualityOrder.indexOf(newQuality) < qualityOrder.indexOf(currentNetworkQuality)) {
-        // Downgrading quality happens immediately
+    } else if (newQualityIndex < currentQualityIndex) {
+        // Downgrade happens immediately
         currentNetworkQuality = newQuality;
+        qualityChanged = true;
+    }
+
+    if (qualityChanged) {
         lastQualityChangeTime = now;
-        console.log(`Network quality downgraded to: ${newQuality} (Latency: ${avgLatency.toFixed(0)}ms)`);
+        stableNetworkQuality = currentNetworkQuality; // Update stable quality as well
+        console.log(`Network quality changed to: ${currentNetworkQuality} (Avg Latency: ${avgLatency.toFixed(0)}ms)`);
+        applyQualitySettings(currentNetworkQuality); // Apply client-side changes if any
+
+        // Inform the server about the client's calculated quality
+        socket.emit('client_network_quality', {
+            code: sessionCode,
+            quality: currentNetworkQuality,
+            latency: avgLatency
+        });
     }
-    
-    // Send network quality to server
-    socket.emit('client_network_quality', {
-        quality: currentNetworkQuality,
-        latency: avgLatency
-    });
 }
 
-// Apply quality settings
+// Apply client-side settings based on quality (optional)
 function applyQualitySettings(quality) {
-    // Apply quality settings based on level
-    switch (quality) {
-        case 'very_low':
-            // Very low quality settings
-            break;
-        case 'low':
-            // Low quality settings
-            break;
-        case 'medium':
-            // Medium quality settings
-            break;
-        case 'high':
-            // High quality settings
-            break;
-    }
+    console.log(`Applying settings for quality: ${quality}`);
+    // Example: Could adjust frame rate capture, but usually handled by requestAnimationFrame
+    // Example: Could change getUserMedia constraints (requires renegotiation)
 }
 
-// Apply video effect based on verification result
+// Apply/Remove visual effect overlay based on verification result
 function applyVideoEffect(effect) {
-    const container = document.querySelector('.video-container');
+    const container = document.querySelector('.video-section'); // Apply to the main container
     if (!container) return;
-    
-    // Remove any existing effects
-    removeVideoEffect();
-    
-    // Apply the new effect
-    switch (effect) {
-        case 'success':
-            container.classList.add('success-overlay');
-            break;
-        case 'failure':
-            container.classList.add('failure-overlay');
-            break;
-        case 'duress':
-            container.classList.add('duress-overlay');
-            break;
-    }
+    removeVideoEffect(); // Clear previous effects first
+    container.classList.add(`${effect}-overlay`);
 }
 
-// Remove video effect
 function removeVideoEffect() {
-    const container = document.querySelector('.video-container');
+    const container = document.querySelector('.video-section');
     if (!container) return;
-    
     container.classList.remove('success-overlay', 'failure-overlay', 'duress-overlay');
-}
-
-// Create a scaled frame for sending to the server
-function createScaledFrame(sourceCanvas, quality, isPortrait) {
-    // Create a new canvas for the scaled frame
-    const scaledCanvas = document.createElement('canvas');
-    const ctx = scaledCanvas.getContext('2d');
-    
-    // Set dimensions based on quality and orientation
-    let width, height;
-    if (isPortrait) {
-        // In portrait mode, swap width and height to maintain aspect ratio (3:4)
-        switch (quality) {
-            case 'very_low':
-                width = 180; height = 240;
-                break;
-            case 'low':
-                width = 240; height = 320;
-                break;
-            case 'medium':
-                width = 360; height = 480;
-                break;
-            case 'high':
-            default:
-                width = 480; height = 640;
-                break;
-        }
-    } else {
-        // In landscape mode, use original 4:3 aspect ratio
-        switch (quality) {
-            case 'very_low':
-                width = 240; height = 180;
-                break;
-            case 'low':
-                width = 320; height = 240;
-                break;
-            case 'medium':
-                width = 480; height = 360;
-                break;
-            case 'high':
-            default:
-                width = 640; height = 480;
-                break;
-        }
-    }
-    
-    // Set canvas dimensions
-    scaledCanvas.width = width;
-    scaledCanvas.height = height;
-    
-    // Draw the source canvas onto the scaled canvas
-    ctx.drawImage(sourceCanvas, 0, 0, width, height);
-    
-    return scaledCanvas.toDataURL('image/jpeg', 0.7);
 }
