@@ -23,6 +23,7 @@ class Config:
 
     # Session timeout in seconds
     SESSION_TIMEOUT = 120
+    CODE_EXPIRATION_TIME = 120
     
     # Camera settings
     CAMERA_WIDTH = 640
