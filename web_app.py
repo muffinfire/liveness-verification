@@ -1,4 +1,4 @@
-"""Web application for liveness detection.
+"""Web application for liveness detection with orientation support.
 
 This module implements the Flask web server and Socket.IO communication for the
 liveness detection system. It handles client connections, processes video and audio
@@ -212,6 +212,30 @@ def handle_client_network_quality(data):
             logger.info(f"NETWORK STATS - Session: {session_id}, Quality: {quality}, Latency: {latency}ms, JPEG Quality: {JPEG_QUALITY[quality]}")
             last_network_log_time[session_id] = current_time
 
+@socketio.on('orientation_change')
+def handle_orientation_change(data):
+    """Handle orientation change information from client.
+    
+    Args:
+        data: Dictionary containing orientation information
+    """
+    session_id = request.sid
+    if session_id not in active_sessions:
+        return
+    
+    is_portrait = data.get('isPortrait', False)
+    width = data.get('width', 0)
+    height = data.get('height', 0)
+    
+    # Store orientation data in session
+    active_sessions[session_id]['orientation'] = {
+        'isPortrait': is_portrait,
+        'width': width,
+        'height': height
+    }
+    
+    logger.info(f"Client {session_id} reported orientation change: {'portrait' if is_portrait else 'landscape'}, {width}x{height}")
+
 @socketio.on('frame')
 def handle_frame(data):
     """Legacy frame handler (deprecated).
@@ -399,15 +423,26 @@ def handle_join_verification(data):
     verification_codes[code]['verifier_id'] = session_id
     verification_codes[code]['client_info'] = client_info
     
-    # Initialize session data
+    # Initialize session data with orientation information
+    is_portrait = client_info.get('isPortrait', False)
+    screen_width = client_info.get('screenWidth', 0)
+    screen_height = client_info.get('screenHeight', 0)
+    
     active_sessions[session_id] = {
         'code': code,
         'detector': None,
         'last_activity': time.time(),
         'attempts': 0,
         'network_quality': DEFAULT_NETWORK_QUALITY,
-        'client_info': client_info
+        'client_info': client_info,
+        'orientation': {
+            'isPortrait': is_portrait,
+            'width': screen_width,
+            'height': screen_height
+        }
     }
+    
+    logger.info(f"Client orientation: {'portrait' if is_portrait else 'landscape'}, {screen_width}x{screen_height}")
     
     # Join the room for this verification code
     join_room(code)
@@ -431,24 +466,40 @@ def handle_join_verification(data):
     # Send the challenge to the client
     emit('challenge', {'text': challenge_text})
 
-# Function to resize frame based on network quality
-def resize_frame_by_quality(frame, quality):
-    """Resize frame based on network quality.
+# Function to resize frame based on network quality and orientation
+def resize_frame_by_quality(frame, quality, is_portrait=False):
+    """Resize frame based on network quality and orientation.
     
     Args:
         frame: The original frame
         quality: Network quality level
+        is_portrait: Whether the device is in portrait mode
         
     Returns:
         Resized frame
     """
-    if quality == 'very_low':
-        return cv2.resize(frame, (240, 180))
-    elif quality == 'low':
-        return cv2.resize(frame, (320, 240))
-    elif quality == 'medium':
-        return cv2.resize(frame, (480, 360))
-    return frame  # No resize for high quality
+    if is_portrait:
+        # In portrait mode, swap width and height to maintain aspect ratio (3:4)
+        if quality == 'very_low':
+            return cv2.resize(frame, (180, 240))
+        elif quality == 'low':
+            return cv2.resize(frame, (240, 320))
+        elif quality == 'medium':
+            return cv2.resize(frame, (360, 480))
+        elif quality == 'high':
+            # For high quality in portrait, still resize but maintain higher resolution
+            return cv2.resize(frame, (480, 640))
+    else:
+        # In landscape mode, use original 4:3 aspect ratio
+        if quality == 'very_low':
+            return cv2.resize(frame, (240, 180))
+        elif quality == 'low':
+            return cv2.resize(frame, (320, 240))
+        elif quality == 'medium':
+            return cv2.resize(frame, (480, 360))
+        # No resize for high quality in landscape mode
+    
+    return frame  # No resize for high quality or unknown quality
 
 @socketio.on('process_frame')
 def handle_process_frame(data):
@@ -461,6 +512,7 @@ def handle_process_frame(data):
     code = data.get('code')
     timestamp = data.get('timestamp')
     detection_mode = data.get('detectionMode', 'normal')
+    is_portrait = data.get('isPortrait', False)
     
     # Validate session
     if session_id not in active_sessions or active_sessions[session_id]['code'] != code:
@@ -484,6 +536,14 @@ def handle_process_frame(data):
     
     # Update stored network quality
     active_sessions[session_id]['network_quality'] = network_quality
+    
+    # Update orientation information if provided
+    if 'isPortrait' in data:
+        active_sessions[session_id]['orientation']['isPortrait'] = data['isPortrait']
+        is_portrait = data['isPortrait']
+    else:
+        # Use stored orientation if not provided in current data
+        is_portrait = active_sessions[session_id]['orientation'].get('isPortrait', False)
     
     # Decode image data
     try:
@@ -535,8 +595,19 @@ def handle_process_frame(data):
         elif detection_mode == 'action' and hasattr(detector, 'update_processing_mode'):
             detector.update_processing_mode('action_detection')
         
-        # Process the frame
-        result = detector.process_frame(frame)
+        # Pass orientation data to the detector if it supports it
+        orientation_data = {
+            'isPortrait': is_portrait,
+            'width': frame.shape[1],
+            'height': frame.shape[0]
+        }
+        
+        # Process the frame with orientation data if supported
+        if hasattr(detector, 'process_frame_with_orientation'):
+            result = detector.process_frame_with_orientation(frame, orientation_data)
+        else:
+            result = detector.process_frame(frame)
+            
         frame = result['frame']
         debug_frame = result['debug_frame']
         
@@ -549,20 +620,20 @@ def handle_process_frame(data):
             # Image format
             image_format = 'jpeg'
             
-            # Resize frame based on network quality
-            frame = resize_frame_by_quality(frame, network_quality)
+            # Resize frame based on network quality and orientation
+            frame = resize_frame_by_quality(frame, network_quality, is_portrait)
             
             # Log frame size and quality periodically
             current_time = time.time()
             if session_id not in last_network_log_time or current_time - last_network_log_time.get(session_id, 0) > NETWORK_LOG_INTERVAL:
-                logger.info(f"FRAME STATS - Session: {session_id}, Quality: {network_quality}, Size: {frame.shape[1]}x{frame.shape[0]}, JPEG Quality: {jpeg_quality}")
+                logger.info(f"FRAME STATS - Session: {session_id}, Quality: {network_quality}, Size: {frame.shape[1]}x{frame.shape[0]}, JPEG Quality: {jpeg_quality}, Orientation: {'portrait' if is_portrait else 'landscape'}")
                 last_network_log_time[session_id] = current_time
             
             encode_params = [cv2.IMWRITE_JPEG_QUALITY, jpeg_quality]
             
-            # Generate a cache key based on frame content and quality
+            # Generate a cache key based on frame content, quality, and orientation
             frame_hash = hash(frame.tobytes()) % 10000000  # Simple hash of frame content
-            cache_key = f"{frame_hash}_{jpeg_quality}"
+            cache_key = f"{frame_hash}_{jpeg_quality}_{is_portrait}"
             
             # Check if we have this frame cached
             current_time = time.time()
@@ -610,7 +681,8 @@ def handle_process_frame(data):
                     'action_text': action_text,
                     'word_text': word_text,
                     'challenge_text': challenge_text,
-                    'timestamp': timestamp  # Echo back timestamp for latency calculation
+                    'timestamp': timestamp,  # Echo back timestamp for latency calculation
+                    'isPortrait': is_portrait  # Include orientation information
                 }, room=requester_id)
         else:
             logger.debug("Display frame is None")
@@ -621,8 +693,8 @@ def handle_process_frame(data):
             # Use lower quality for debug frames to save bandwidth
             debug_quality = max(50, JPEG_QUALITY.get(network_quality, 70) - DEBUG_QUALITY_REDUCTION)
             
-            # Resize debug frame based on network quality
-            debug_frame = resize_frame_by_quality(debug_frame, network_quality)
+            # Resize debug frame based on network quality and orientation
+            debug_frame = resize_frame_by_quality(debug_frame, network_quality, is_portrait)
             
             debug_encode_params = [cv2.IMWRITE_JPEG_QUALITY, debug_quality]
             _, buffer_dbg = cv2.imencode('.jpg', debug_frame, debug_encode_params)
@@ -640,7 +712,8 @@ def handle_process_frame(data):
             'verification_result': result['verification_result'],
             'exit_flag': result['exit_flag'],
             'duress_detected': result['duress_detected'],
-            'timestamp': timestamp  # Echo back timestamp for latency calculation
+            'timestamp': timestamp,  # Echo back timestamp for latency calculation
+            'isPortrait': is_portrait  # Include orientation information
         }
         
         # Send processed frame data to client
