@@ -16,13 +16,27 @@ document.addEventListener('DOMContentLoaded', () => {
     const processedFrameContainer = document.getElementById('processed-frame-container'); // Container for debug frame
     const sessionCode = document.getElementById('session-code').textContent; // Verification code from the HTML
     
+    // Create network status display element
+    const networkStatusContainer = document.createElement('div');
+    networkStatusContainer.id = 'network-status-container';
+    networkStatusContainer.style.position = 'absolute';
+    networkStatusContainer.style.bottom = '10px';
+    networkStatusContainer.style.left = '10px';
+    networkStatusContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+    networkStatusContainer.style.color = 'white';
+    networkStatusContainer.style.padding = '5px 10px';
+    networkStatusContainer.style.borderRadius = '5px';
+    networkStatusContainer.style.fontSize = '12px';
+    networkStatusContainer.style.zIndex = '1000';
+    document.body.appendChild(networkStatusContainer);
+    
     // Declare variables used throughout the script
     let socket; // Socket.IO connection to the server
     let isProcessing = false; // Flag to control frame capturing and sending
     let stream = null; // Webcam media stream
     let verificationAttempts = 0; // Counter for verification attempts
     const MAX_VERIFICATION_ATTEMPTS = 3; // Maximum allowed attempts before failing
-    let isDebugMode = false; // Whether debug logging is enabled (set by server)
+    let isDebugMode = true; // Whether debug logging is enabled (set by server) - CHANGED: default to true for testing
     let showDebugFrame = false; // Whether to show the debug frame (set by server)
     let frameCount = 0; // Counter for frames sent to the server
     
@@ -45,11 +59,20 @@ document.addEventListener('DOMContentLoaded', () => {
     let frameTransmissionTimes = []; // Array to store frame transmission times for network quality estimation
     let frameTransmissionLatencies = []; // Array to store frame transmission latencies
     
-    // Video resolution settings
+    // Network logging variables
+    let lastNetworkLogTime = 0; // Last time network stats were logged
+    const NETWORK_LOG_INTERVAL = 2000; // Log network stats every 2 seconds
+    let actualFps = 0; // Actual frames per second being achieved
+    let lastFpsUpdateTime = 0; // Last time FPS was calculated
+    let framesSinceLastFpsUpdate = 0; // Frames sent since last FPS calculation
+    
+    // Video resolution settings - UPDATED: added very_low and ultra_low settings
     const RESOLUTION_SETTINGS = {
         high: { width: 640, height: 480, quality: 0.5 },
         medium: { width: 480, height: 360, quality: 0.2 },
-        low: { width: 320, height: 240, quality: 0.1 }
+        low: { width: 320, height: 240, quality: 0.1 },
+        very_low: { width: 240, height: 180, quality: 0.05 },
+        ultra_low: { width: 160, height: 120, quality: 0.03 }
     };
     let currentResolution = RESOLUTION_SETTINGS.medium; // Start with medium resolution
     
@@ -90,12 +113,10 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Handle debug status response from the server
         socket.on('debug_status', (data) => {
-            isDebugMode = data.debug; // Set debug mode based on server config
+            isDebugMode = data.debug || true; // Set debug mode based on server config, default to true for testing
             showDebugFrame = data.showDebugFrame; // Set whether to show debug frame
 
-            if (isDebugMode) {
-                console.log(`Debug mode: ${isDebugMode}`);
-            }
+            console.log(`Debug mode: ${isDebugMode}`);
             
             // Adjust UI visibility based on whether debug frame should be shown
             if (showDebugFrame) {
@@ -334,18 +355,14 @@ document.addEventListener('DOMContentLoaded', () => {
         socket.on('network_quality', (data) => {
             if (data.quality && data.quality !== networkQuality) {
                 networkQuality = data.quality;
-                if (isDebugMode) {
-                    console.log(`Server reported network quality: ${networkQuality}`);
-                }
+                console.log(`Server reported network quality: ${networkQuality}`);
                 
                 // Adjust video quality based on server-reported network quality
                 if (adaptiveQualityEnabled) {
                     currentResolution = RESOLUTION_SETTINGS[networkQuality];
                     videoQuality = currentResolution.quality;
                     
-                    if (isDebugMode) {
-                        console.log(`Adjusted video settings based on server feedback: ${currentResolution.width}x${currentResolution.height}, quality: ${videoQuality}`);
-                    }
+                    console.log(`Adjusted video settings based on server feedback: ${currentResolution.width}x${currentResolution.height}, quality: ${videoQuality}`);
                 }
             }
         });
@@ -392,19 +409,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Adjust frame rate based on detection mode
                 if (blink_detection_active) {
                     currentFrameInterval = BLINK_FRAME_INTERVAL;
-                    if (isDebugMode) {
-                        console.log('Blink detection active - increasing frame rate to 15 FPS');
-                    }
+                    console.log('Blink detection active - increasing frame rate to 15 FPS');
                 } else if (action_detection_active) {
                     currentFrameInterval = ACTION_FRAME_INTERVAL;
-                    if (isDebugMode) {
-                        console.log('Action detection active - setting frame rate to 12 FPS');
-                    }
+                    console.log('Action detection active - setting frame rate to 12 FPS');
                 } else {
                     currentFrameInterval = FRAME_INTERVAL;
-                    if (isDebugMode) {
-                        console.log('Standard mode - setting frame rate to 10 FPS');
-                    }
+                    console.log('Standard mode - setting frame rate to 10 FPS');
                 }
                 
                 // Send network quality information to server
@@ -454,31 +465,54 @@ document.addEventListener('DOMContentLoaded', () => {
         // Calculate average latency if available
         const avgLatency = calculateAverageLatency();
         
+        // Calculate estimated bandwidth (very rough approximation)
+        const avgFrameSize = currentResolution.width * currentResolution.height * 3 * videoQuality; // Rough estimate of frame size in bytes
+        const estimatedBandwidth = avgFrameSize / (avgTime / 1000); // Bytes per second
+        const estimatedKbps = Math.round(estimatedBandwidth * 8 / 1000); // Convert to Kbps
+        
         // Determine network quality based on average transmission time and latency
+        // UPDATED: More granular network quality levels with very_low and ultra_low
         let newQuality;
         if (avgTime < 100 && avgLatency < 150) {
             newQuality = 'high';
-        } else if (avgTime < 300 && avgLatency < 300) {
+        } else if (avgTime < 200 && avgLatency < 250) {
             newQuality = 'medium';
-        } else {
+        } else if (avgTime < 300 && avgLatency < 350) {
             newQuality = 'low';
+        } else if (avgTime < 500 && avgLatency < 500) {
+            newQuality = 'very_low';
+        } else {
+            newQuality = 'ultra_low';
         }
         
-        // Only log if network quality changed
+        // Always log network stats periodically, regardless of quality changes
+        const now = performance.now();
+        if (now - lastNetworkLogTime > NETWORK_LOG_INTERVAL) {
+            // Calculate actual FPS
+            if (now - lastFpsUpdateTime > 1000) { // Update FPS once per second
+                actualFps = Math.round((framesSinceLastFpsUpdate * 1000) / (now - lastFpsUpdateTime));
+                lastFpsUpdateTime = now;
+                framesSinceLastFpsUpdate = 0;
+            }
+            
+            // Update network status display
+            updateNetworkStatusDisplay(newQuality, avgTime, avgLatency, estimatedKbps, actualFps);
+            
+            console.log(`Network stats: quality=${newQuality}, avg_time=${avgTime.toFixed(2)}ms, latency=${avgLatency.toFixed(2)}ms, est_bandwidth=${estimatedKbps}Kbps, actual_fps=${actualFps}`);
+            lastNetworkLogTime = now;
+        }
+        
+        // Update quality if changed
         if (newQuality !== networkQuality) {
             networkQuality = newQuality;
-            if (isDebugMode) {
-                console.log(`Network quality updated to: ${networkQuality} (avg time: ${avgTime.toFixed(2)}ms, avg latency: ${avgLatency.toFixed(2)}ms)`);
-            }
+            console.log(`Network quality updated to: ${networkQuality} (avg time: ${avgTime.toFixed(2)}ms, avg latency: ${avgLatency.toFixed(2)}ms)`);
             
             // Adjust video quality based on network quality if adaptive quality is enabled
             if (adaptiveQualityEnabled) {
                 currentResolution = RESOLUTION_SETTINGS[networkQuality];
                 videoQuality = currentResolution.quality;
                 
-                if (isDebugMode) {
-                    console.log(`Adjusted video settings: ${currentResolution.width}x${currentResolution.height}, quality: ${videoQuality}`);
-                }
+                console.log(`Adjusted video settings: ${currentResolution.width}x${currentResolution.height}, quality: ${videoQuality}`);
                 
                 // Inform server about client-detected network quality
                 if (socket && socket.connected) {
@@ -489,6 +523,30 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         }
+    }
+    
+    // Update the network status display element
+    function updateNetworkStatusDisplay(quality, avgTime, avgLatency, estimatedKbps, actualFps) {
+        // Set color based on quality
+        let qualityColor;
+        switch(quality) {
+            case 'high': qualityColor = '#4cd137'; break; // Green
+            case 'medium': qualityColor = '#fbc531'; break; // Yellow
+            case 'low': qualityColor = '#e84118'; break; // Red
+            case 'very_low': qualityColor = '#c23616'; break; // Dark red
+            case 'ultra_low': qualityColor = '#8c0000'; break; // Very dark red
+            default: qualityColor = '#7f8fa6'; // Gray
+        }
+        
+        // Update the display
+        networkStatusContainer.innerHTML = `
+            <div style="font-weight: bold; color: ${qualityColor};">Network: ${quality.toUpperCase()}</div>
+            <div>Latency: ${avgLatency.toFixed(0)}ms</div>
+            <div>Bandwidth: ~${estimatedKbps}Kbps</div>
+            <div>FPS: ${actualFps}</div>
+            <div>Resolution: ${currentResolution.width}x${currentResolution.height}</div>
+            <div>Quality: ${Math.round(videoQuality * 100)}%</div>
+        `;
     }
     
     // Create a downscaled version of the video frame
@@ -558,6 +616,7 @@ document.addEventListener('DOMContentLoaded', () => {
                               action_detection_active ? 'action' : 'normal'
             });
             frameCount++; // Increment frame counter
+            framesSinceLastFpsUpdate++; // Increment frames for FPS calculation
         } catch (err) {
             console.error('Error capturing frame:', err); // Log any errors
         }

@@ -66,15 +66,16 @@ last_log_time = {}
 
 # Cache for encoded frames to reduce redundant processing
 frame_cache = {}
-FRAME_CACHE_SIZE = 20  # Maximum number of frames to cache (increased from 10)
-FRAME_CACHE_TTL = 5    # Time to live in seconds
+FRAME_CACHE_SIZE = 30  # Maximum number of frames to cache (increased from 20)
+FRAME_CACHE_TTL = 10   # Time to live in seconds (increased from 5)
 
-# JPEG encoding quality for different network conditions
+# JPEG encoding quality for different network conditions - UPDATED: reduced quality values
 JPEG_QUALITY = {
-    'high': 90,    # High quality for good connections
-    'medium': 80,  # Medium quality for average connections
-    'low': 70,     # Lower quality for poor connections
-    'very_low': 60 # Very low quality for extremely poor connections
+    'high': 80,    # Reduced from 90
+    'medium': 65,  # Reduced from 80
+    'low': 50,     # Reduced from 70
+    'very_low': 40, # Reduced from 60
+    'ultra_low': 30 # New ultra-low setting
 }
 
 # Default network quality
@@ -82,6 +83,10 @@ DEFAULT_NETWORK_QUALITY = 'medium'
 
 # Debug frame quality reduction factor
 DEBUG_QUALITY_REDUCTION = 15  # Reduce debug frame quality by this amount compared to main frame
+
+# Network quality logging
+last_network_log_time = {}
+NETWORK_LOG_INTERVAL = 5  # Log network quality every 5 seconds
 
 @app.route('/')
 def index():
@@ -202,6 +207,11 @@ def handle_client_network_quality(data):
         if session_id not in last_log_time or current_time - last_log_time.get(session_id, 0) > 10:
             logger.debug(f"Client {session_id} reported network quality: {quality}, latency: {latency}ms")
             last_log_time[session_id] = current_time
+        
+        # Always log network quality periodically for debugging
+        if session_id not in last_network_log_time or current_time - last_network_log_time.get(session_id, 0) > NETWORK_LOG_INTERVAL:
+            logger.info(f"NETWORK STATS - Session: {session_id}, Quality: {quality}, Latency: {latency}ms, JPEG Quality: {JPEG_QUALITY[quality]}")
+            last_network_log_time[session_id] = current_time
 
 @socketio.on('frame')
 def handle_frame(data):
@@ -285,7 +295,7 @@ def handle_get_debug_status():
     """Send debug status to client."""
     logger.debug("Debug status requested")
     emit('debug_status', {
-        'debug': config.BROWSER_DEBUG,
+        'debug': True,  # UPDATED: Force debug mode to true for testing
         'showDebugFrame': config.SHOW_DEBUG_FRAME
     })
 
@@ -422,6 +432,27 @@ def handle_join_verification(data):
     # Send the challenge to the client
     emit('challenge', {'text': challenge_text})
 
+# Function to resize frame based on network quality
+def resize_frame_by_quality(frame, quality):
+    """Resize frame based on network quality.
+    
+    Args:
+        frame: The original frame
+        quality: Network quality level
+        
+    Returns:
+        Resized frame
+    """
+    if quality == 'ultra_low':
+        return cv2.resize(frame, (160, 120))
+    elif quality == 'very_low':
+        return cv2.resize(frame, (240, 180))
+    elif quality == 'low':
+        return cv2.resize(frame, (320, 240))
+    elif quality == 'medium':
+        return cv2.resize(frame, (480, 360))
+    return frame  # No resize for high quality
+
 @socketio.on('process_frame')
 def handle_process_frame(data):
     """Process a video frame from the client.
@@ -517,6 +548,16 @@ def handle_process_frame(data):
         if frame is not None:
             # Use appropriate JPEG quality based on network conditions
             jpeg_quality = JPEG_QUALITY.get(network_quality, JPEG_QUALITY[DEFAULT_NETWORK_QUALITY])
+            
+            # Resize frame based on network quality
+            frame = resize_frame_by_quality(frame, network_quality)
+            
+            # Log frame size and quality periodically
+            current_time = time.time()
+            if session_id not in last_network_log_time or current_time - last_network_log_time.get(session_id, 0) > NETWORK_LOG_INTERVAL:
+                logger.info(f"FRAME STATS - Session: {session_id}, Quality: {network_quality}, Size: {frame.shape[1]}x{frame.shape[0]}, JPEG Quality: {jpeg_quality}")
+                last_network_log_time[session_id] = current_time
+            
             encode_params = [cv2.IMWRITE_JPEG_QUALITY, jpeg_quality]
             
             # Generate a cache key based on frame content and quality
@@ -529,9 +570,16 @@ def handle_process_frame(data):
                 disp_b64 = frame_cache[cache_key][1]
                 logger.debug("Using cached display frame")
             else:
-                # Encode with specified quality
-                _, buffer_disp = cv2.imencode('.jpg', frame, encode_params)
-                disp_b64 = base64.b64encode(buffer_disp).decode('utf-8')
+                # Try WebP encoding first if supported
+                try:
+                    _, buffer_disp = cv2.imencode('.webp', frame, [cv2.IMWRITE_WEBP_QUALITY, jpeg_quality])
+                    disp_b64 = base64.b64encode(buffer_disp).decode('utf-8')
+                    image_format = 'webp'
+                except:
+                    # Fall back to JPEG if WebP is not supported
+                    _, buffer_disp = cv2.imencode('.jpg', frame, encode_params)
+                    disp_b64 = base64.b64encode(buffer_disp).decode('utf-8')
+                    image_format = 'jpeg'
                 
                 # Cache the encoded frame
                 if len(frame_cache) >= FRAME_CACHE_SIZE:
@@ -557,7 +605,7 @@ def handle_process_frame(data):
                 
                 # Send optimized partner video frame
                 emit('partner_video_frame', {
-                    'image': f"data:image/jpeg;base64,{disp_b64}",
+                    'image': f"data:image/{image_format};base64,{disp_b64}",
                     'code': code,
                     'action_text': action_text,
                     'word_text': word_text,
@@ -572,6 +620,10 @@ def handle_process_frame(data):
         if debug_frame is not None and config.SHOW_DEBUG_FRAME:
             # Use lower quality for debug frames to save bandwidth
             debug_quality = max(50, JPEG_QUALITY.get(network_quality, 70) - DEBUG_QUALITY_REDUCTION)
+            
+            # Resize debug frame based on network quality
+            debug_frame = resize_frame_by_quality(debug_frame, network_quality)
+            
             debug_encode_params = [cv2.IMWRITE_JPEG_QUALITY, debug_quality]
             _, buffer_dbg = cv2.imencode('.jpg', debug_frame, debug_encode_params)
             debug_b64 = base64.b64encode(buffer_dbg).decode('utf-8')

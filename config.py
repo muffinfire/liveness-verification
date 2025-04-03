@@ -1,14 +1,14 @@
-"""Configuration settings for the liveness detection system."""
+"""Blink detection configuration for liveness detection system."""
 
 import os
 import logging
 
 class Config:
     # Debug mode for browser
-    BROWSER_DEBUG = False
+    BROWSER_DEBUG = True  # UPDATED: Set to True for testing
 
     # Show debug frame with eye tracking polygons, EAR values, etc.
-    SHOW_DEBUG_FRAME = False
+    SHOW_DEBUG_FRAME = False  # UPDATED: Set to True for testing
 
     # Logging modes (Debug, Info, Error)
     LOGGING_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -38,10 +38,10 @@ class Config:
     # History lengths for tracking
     LANDMARK_HISTORY_MAX = 5  # Maximum frames to keep in landmark history
     
-    # Blink detection parameters
-    BLINK_THRESHOLD = 0.30  # EAR threshold for blink detection
+    # Blink detection parameters - UPDATED: Adjusted for low frame rates
+    BLINK_THRESHOLD = 0.32  # EAR threshold for blink detection (increased from 0.30)
     MIN_BLINK_FRAMES = 1    # Minimum consecutive frames below threshold to count as blink
-    MIN_BLINK_INTERVAL = 0.1  # Minimum time between blinks (seconds)
+    MIN_BLINK_INTERVAL = 0.2  # Minimum time between blinks (seconds) (increased from 0.1)
     
     # Challenge parameters
     CHALLENGE_TIMEOUT = 10  # seconds
@@ -90,4 +90,6 @@ class Config:
     KEYFILE = 'key.pem'
     HOST = '0.0.0.0'
     PORT = int(os.environ.get('PORT', 8080))
-    BASE_URL = 'https://verify.adambaumgartner.com'  # Configurable base URL for QR code
+    
+    # Base URL for verification links
+    BASE_URL = os.environ.get('BASE_URL', 'https://verify.adambaumgartner.com')
