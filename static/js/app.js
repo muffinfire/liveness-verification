@@ -49,13 +49,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const BLINK_FRAME_INTERVAL = 1000 / BLINK_DETECTION_FPS; // Milliseconds between frames during blink detection
     const ACTION_FRAME_INTERVAL = 1000 / ACTION_DETECTION_FPS; // Milliseconds between frames during action detection
     let currentFrameInterval = FRAME_INTERVAL; // Current interval between frames (can change based on detection mode)
-    let videoQuality = 0.7; // JPEG quality (0.0 to 1.0) for normal operation
+    let videoQuality = 0.5; // JPEG quality (0.0 to 1.0) for normal operation
     let blink_detection_active = true; // Flag to indicate if blink detection is currently active
     let action_detection_active = true; // Flag to indicate if action detection is currently active
     let networkQuality = 'medium'; // Estimated network quality: 'high', 'medium', or 'low'
     let adaptiveQualityEnabled = true; // Enable adaptive quality based on network conditions
     let lastNetworkCheckTime = 0; // Last time network quality was checked
-    const NETWORK_CHECK_INTERVAL = 2000; // Check network quality every 5 seconds
+    const NETWORK_CHECK_INTERVAL = 2500; // Check network quality every 5 seconds
     let frameTransmissionTimes = []; // Array to store frame transmission times for network quality estimation
     let frameTransmissionLatencies = []; // Array to store frame transmission latencies
     
@@ -69,10 +69,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Video resolution settings - UPDATED: added very_low and ultra_low settings
     const RESOLUTION_SETTINGS = {
         high: { width: 640, height: 480, quality: 0.7 },
-        medium: { width: 480, height: 360, quality: 0.7 },
-        low: { width: 320, height: 240, quality: 0.7 },
-        very_low: { width: 240, height: 180, quality: 0.7 },
-        ultra_low: { width: 160, height: 120, quality: 0.7 }
+        medium: { width: 480, height: 360, quality: 0.5 },
+        low: { width: 320, height: 240, quality: 0.4 },
+        very_low: { width: 240, height: 180, quality: 0.3 }
     };
     let currentResolution = RESOLUTION_SETTINGS.medium; // Start with medium resolution
     
@@ -473,16 +472,14 @@ document.addEventListener('DOMContentLoaded', () => {
         // Determine network quality based on average transmission time and latency
         // UPDATED: More granular network quality levels with very_low and ultra_low
         let newQuality;
-        if (avgTime < 100 && avgLatency < 150) {
+        if (avgTime < 50 && avgLatency < 100) {
             newQuality = 'high';
-        } else if (avgTime < 200 && avgLatency < 250) {
+        } else if (avgTime < 150 && avgLatency < 200) {
             newQuality = 'medium';
-        } else if (avgTime < 300 && avgLatency < 350) {
+        } else if (avgTime < 250 && avgLatency < 300) {
             newQuality = 'low';
-        } else if (avgTime < 500 && avgLatency < 500) {
+        } else  {
             newQuality = 'very_low';
-        } else {
-            newQuality = 'ultra_low';
         }
         
         // Always log network stats periodically, regardless of quality changes
