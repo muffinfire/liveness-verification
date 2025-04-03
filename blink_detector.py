@@ -112,7 +112,7 @@ class BlinkDetector:
                 
                 # [CHANGED] Rate-limit "BLINK DETECTED" info
                 if now - self.last_debug_time > 1.0:
-                    self.logger.info(f"BLINK DETECTED! Counter: {self.blink_counter}")
+                    self.logger.debug(f"BLINK DETECTED! Counter: {self.blink_counter}")
                 
                 self.last_blink_time = now
             

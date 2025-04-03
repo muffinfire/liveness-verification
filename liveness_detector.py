@@ -155,7 +155,7 @@ class LivenessDetector:
             self.logger.debug(f"Face detected at {face_rect}")  # Log face detection
             blink_detected = self.blink_detector.detect_blinks(frame, face_rect, face_roi)  # Detect blinks
             if blink_detected:
-                self.logger.info("Blink detected in liveness detector")  # Log blink detection
+                self.logger.debug("Blink detected in liveness detector")  # Log blink detection
             self.blink_count = self.blink_detector.blink_counter  # Update blink count
             self.logger.debug(f"Blink count: {self.blink_count}")  # Log blink count
             
@@ -376,7 +376,7 @@ class LivenessDetector:
             'challenge_text': challenge_text,
             'action_completed': action_completed,
             'word_completed': word_completed,
-            'blink_completed': self.blink_count >= 3,
+            'blink_completed': self.blink_count >= 2,
             'time_remaining': time_left,
             'duress_detected': self.duress_detected
         }

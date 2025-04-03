@@ -5,10 +5,10 @@ import logging
 
 class Config:
     # Debug mode for browser
-    BROWSER_DEBUG = True
+    BROWSER_DEBUG = False
 
     # Show debug frame with eye tracking polygons, EAR values, etc.
-    SHOW_DEBUG_FRAME = True
+    SHOW_DEBUG_FRAME = False
 
     # Logging modes (Debug, Info, Error)
     LOGGING_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -31,9 +31,9 @@ class Config:
     
     # Head pose thresholds for landmark-based detection
     HEAD_POSE_THRESHOLD_HORIZONTAL = 0.4  # Symmetric deviation from 1.0 for left/right 3.5
-    HEAD_POSE_THRESHOLD_UP = 10           # Pixels for "up" (positive, negated in code) 10
-    HEAD_POSE_THRESHOLD_DOWN = 35         # Pixels for "down" 35
-    FACE_POSITION_HISTORY_LENGTH = 3      # Kept for responsiveness
+    HEAD_POSE_THRESHOLD_UP = 15           # Pixels for "up"
+    HEAD_POSE_THRESHOLD_DOWN = 30         # Pixels for "down" 35
+    FACE_POSITION_HISTORY_LENGTH = 10      # Kept for responsiveness
         
     # History lengths for tracking
     LANDMARK_HISTORY_MAX = 30  # Maximum frames to keep in landmark history
@@ -56,11 +56,12 @@ class Config:
 
     SPEECH_KEYWORDS = {
         "clock": 1e-3,
-        "book": 1e-3,
+        "book": 1e-2,
         "jump": 1e-3,
         "fish": 1e-3,
         "mind": 1e-3,
         "verify": 1e-3,
+        "stop": 1e-3,
         "noise": 1e-1,
     }
     ACTIONS= [

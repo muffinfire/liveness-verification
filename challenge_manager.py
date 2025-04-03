@@ -70,8 +70,10 @@ class ChallengeManager:
         current_time = time.time()
         self.logger.debug(f"Verifying - Head: {head_pose}, Blinks: {blink_counter}, Speech: '{last_speech}'")
 
-        # Timeout check
-        if current_time - self.challenge_start_time > self.challenge_timeout:
+        # Timeout check with preparation time buffer
+        preparation_time = 2.0  # 2 seconds of preparation time
+        adjusted_time = current_time - self.challenge_start_time - preparation_time
+        if adjusted_time > self.challenge_timeout:
             self.verification_result = "FAIL"
             self.current_challenge = None
             if self.speech_recognizer:
@@ -106,7 +108,7 @@ class ChallengeManager:
         elif "look down" in c and head_pose == "down":
             action_is_happening = True
             self.logger.debug("DOWN action is happening")
-        elif "blink twice" in c and blink_counter >= 3:
+        elif "blink twice" in c and blink_counter >= 2:
             action_is_happening = True
             self.logger.debug(f"BLINK action is happening (Counter: {blink_counter})")
 
@@ -121,7 +123,7 @@ class ChallengeManager:
         ):
             self.last_speech_time = current_time
             self.last_speech_word = last_speech.lower()
-            self.logger.debug(f"Registered speech for word '{last_speech}' at {current_time}")
+            self.logger.info(f"Registered speech for word '{last_speech}' at {current_time}")
 
         # Now check if word is still valid within the time window
         if (
@@ -133,10 +135,21 @@ class ChallengeManager:
             word_is_happening = True
             self.logger.debug(f"WORD '{target_word}' detected within time window (diff: {abs(current_time - self.last_speech_time):.2f}s)")
         elif self.last_speech_time:
-            self.logger.debug(f"Speech too old: {current_time - self.last_speech_time:.2f}s")
+            self.logger.info(f"Speech too old: {current_time - self.last_speech_time:.2f}s")
+            self.last_speech_time = None
+            self.used_speech_time = None
+            self.last_speech_word = None
+            self.speech_recognizer.reset()
+            word_is_happening = False
 
         # FINAL VERIFICATION
-        if action_is_happening and word_is_happening:
+        # For blink challenges, explicitly check blink count
+        blink_requirement_met = True
+        if "blink twice" in c:
+            blink_requirement_met = blink_counter >= 2
+            self.logger.debug(f"Blink requirement check: count={blink_counter}, required=2, met={blink_requirement_met}")
+            
+        if action_is_happening and word_is_happening and blink_requirement_met:
             self.challenge_completed = True
             self.verification_result = "PASS"
             self.used_speech_time = self.last_speech_time
@@ -144,7 +157,7 @@ class ChallengeManager:
             if self.speech_recognizer:
                 self.speech_recognizer.reset()
             self.logger.debug(f"Challenge PASSED! {self.current_challenge}")   
-            self.logger.info(f"Action: {action_is_happening} and speech: {word_is_happening}")
+            self.logger.info(f"Action: {action_is_happening} and speech: {word_is_happening}, blinks: {blink_counter}")
             return True
 
         return False
@@ -179,8 +192,20 @@ class ChallengeManager:
     def get_challenge_time_remaining(self) -> float:
         if self.current_challenge is None or self.challenge_start_time is None:
             return 0
+        
+        # Add a 2-second preparation time buffer
+        # This ensures the timer display starts at 10 seconds
+        # but the actual verification only fails after 12 seconds
         elapsed = time.time() - self.challenge_start_time
-        return max(0, self.challenge_timeout - elapsed)
+        preparation_time = 2.0  # 2 seconds of preparation time
+        
+        # If we're still in the preparation phase, return the full challenge time
+        if elapsed <= preparation_time:
+            return self.challenge_timeout
+        
+        # Otherwise, subtract the elapsed time minus the preparation time
+        adjusted_elapsed = elapsed - preparation_time
+        return max(0, self.challenge_timeout - adjusted_elapsed)
 
     def update(self, head_pose: str, blink_counter: int, last_speech: str) -> None:
         if self.current_challenge:

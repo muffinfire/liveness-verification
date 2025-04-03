@@ -81,7 +81,7 @@ class ActionDetector:
             HORIZONTAL_THRESHOLD = self.config.HEAD_POSE_THRESHOLD_HORIZONTAL
             CENTER_MIN = 1.0 - HORIZONTAL_THRESHOLD  # Minimum ratio for center
             CENTER_MAX = 1.0 + HORIZONTAL_THRESHOLD  # Maximum ratio for center
-            UP_THRESHOLD = -self.config.HEAD_POSE_THRESHOLD_UP  # Negative for upward movement
+            UP_THRESHOLD = self.config.HEAD_POSE_THRESHOLD_UP  # Negative for upward movement
             DOWN_THRESHOLD = self.config.HEAD_POSE_THRESHOLD_DOWN  # Positive for downward movement
             
             old_pose = self.head_pose  # Store previous pose for comparison

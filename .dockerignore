@@ -1,0 +1,56 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Documentation
+README.md
+CHANGELOG.md
+docs/
+
+# Test files
+tests/
+test_*.py
+*_test.py
+
+# Media files
+*.mp4
+*.avi
+*.mov
+
+# Temporary files
+.DS_Store
+Thumbs.db
