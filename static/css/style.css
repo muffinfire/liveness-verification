@@ -632,3 +632,53 @@ input[type="tel"]:focus {
     font-size: 14px;
     z-index: 5;
 }
+/* Base styles for video containers */
+.video-wrapper, #processed-frame-container, .partner-video-container {
+    position: relative;
+    width: 48%;
+    max-width: 640px;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+    /* Maintain 4:3 aspect ratio in landscape mode */
+    aspect-ratio: 4/3;
+    background-color: #000;
+}
+
+/* Video elements */
+#webcam, #overlay, #debug-frame, #partner-video {
+    width: 100%;
+    height: 100%;
+    border-radius: 12px;
+    /* Use contain to maintain aspect ratio with letterboxing */
+    object-fit: contain;
+    background-color: #000;
+}
+
+/* Portrait mode specific styles */
+.portrait-mode {
+    /* Maintain 3:4 aspect ratio in portrait mode */
+    aspect-ratio: 3/4 !important;
+}
+
+/* Debug frame container */
+#processed-frame-container {
+    margin-top: 20px;
+    width: 100%;
+    max-width: 480px;
+}
+
+/* Partner video container */
+.partner-video-container {
+    margin: 20px auto;
+    width: 100%;
+    max-width: 480px;
+}
+
+/* Media queries for mobile devices */
+@media (max-width: 768px) {
+    .video-wrapper, #processed-frame-container, .partner-video-container {
+        width: 100%;
+        margin: 10px auto;
+    }
+}

@@ -1,370 +1,299 @@
-// Wait for the HTML document to fully load before running the script
+// Modified version of app.js with fixes for debug and partner frames
+// This ensures all video frames maintain proper aspect ratio in both portrait and landscape modes
+
+// Global variables
+let socket;
+let webcam;
+let overlay;
+let overlayContext;
+let processedFrame;
+let debugFrame;
+let challengeText;
+let actionStatus;
+let wordStatus;
+let blinkStatus;
+let timeRemaining;
+let resultContainer;
+let resultText;
+let resetButton;
+let sessionCode;
+let isProcessing = false;
+let verificationAttempts = 0;
+let frameTransmissionTimes = [];
+let frameTransmissionLatencies = [];
+let lastNetworkCheckTime = 0;
+let currentNetworkQuality = 'medium'; // Default quality
+let stableNetworkQuality = 'medium';
+let lastQualityChangeTime = 0;
+let isPortrait = false; // Track device orientation
+
+// Constants
+const MAX_VERIFICATION_ATTEMPTS = 3;
+const NETWORK_CHECK_INTERVAL = 5000; // Check network every 5 seconds
+const QUALITY_STABILITY_THRESHOLD = 10000; // 10 seconds of stability before upgrade
+const qualityOrder = ['very_low', 'low', 'medium', 'high']; // In order of increasing quality
+
+// Initialize the application when the DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    // Get references to DOM elements used in the application
-    const video = document.getElementById('webcam'); // The live webcam feed element
-    const canvas = document.getElementById('overlay'); // Canvas for overlaying text or effects
-    const ctx = canvas.getContext('2d'); // 2D drawing context for the canvas
-    const debugFrame = document.getElementById('debug-frame'); // Element to display processed debug frames
-    const challengeText = document.getElementById('challenge-text'); // Displays the current challenge (e.g., "Turn left")
-    const actionStatus = document.getElementById('action-status'); // Shows if the action part of the challenge is complete
-    const wordStatus = document.getElementById('word-status'); // Shows if the spoken word part is complete
-    const timeRemaining = document.getElementById('time-remaining'); // Displays remaining time for the challenge
-    const resultContainer = document.getElementById('result-container'); // Container for showing verification results
-    const resultText = document.getElementById('result-text'); // Text element for result messages
-    const resetButton = document.getElementById('reset-button'); // Button to manually reset the verification
-    const videoContainer = document.querySelector('.video-container'); // Container for video and debug frame
-    const processedFrameContainer = document.getElementById('processed-frame-container'); // Container for debug frame
-    const sessionCode = document.getElementById('session-code').textContent; // Verification code from the HTML
-    let stableNetworkQuality = 'medium'; // Tracks the stable quality
-    let lastQualityChangeTime = performance.now(); // Timestamp of last quality change
-    const QUALITY_UPGRADE_DELAY = 5000; // Delay (5 sec) before upgrading
-    const qualityOrder = ['very_low', 'low', 'medium', 'high'];
+    // Get DOM elements
+    webcam = document.getElementById('webcam');
+    overlay = document.getElementById('overlay');
+    overlayContext = overlay.getContext('2d');
+    processedFrame = document.getElementById('processed-frame');
+    debugFrame = document.getElementById('debug-frame');
+    challengeText = document.getElementById('challenge-text');
+    actionStatus = document.getElementById('action-status');
+    wordStatus = document.getElementById('word-status');
+    blinkStatus = document.getElementById('blink-status');
+    timeRemaining = document.getElementById('time-remaining');
+    resultContainer = document.getElementById('result-container');
+    resultText = document.getElementById('result-text');
+    resetButton = document.getElementById('reset-button');
+    sessionCode = document.getElementById('session-code').textContent;
     
-    // Create network status display element
-    const networkStatusContainer = document.createElement('div');
-    networkStatusContainer.id = 'network-status-container';
-    networkStatusContainer.style.position = 'absolute';
-    networkStatusContainer.style.bottom = '10px';
-    networkStatusContainer.style.left = '10px';
-    networkStatusContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-    networkStatusContainer.style.color = 'white';
-    networkStatusContainer.style.padding = '5px 10px';
-    networkStatusContainer.style.borderRadius = '5px';
-    networkStatusContainer.style.fontSize = '12px';
-    networkStatusContainer.style.zIndex = '1000';
-    document.body.appendChild(networkStatusContainer);
+    // Initialize Socket.IO connection
+    socket = io();
     
-    // Declare variables used throughout the script
-    let socket; // Socket.IO connection to the server
-    let isProcessing = false; // Flag to control frame capturing and sending
-    let stream = null; // Webcam media stream
-    let verificationAttempts = 0; // Counter for verification attempts
-    const MAX_VERIFICATION_ATTEMPTS = 3; // Maximum allowed attempts before failing
-    let isDebugMode = true; // Whether debug logging is enabled (set by server) - CHANGED: default to true for testing
-    let showDebugFrame = false; // Whether to show the debug frame (set by server)
-    let frameCount = 0; // Counter for frames sent to the server
+    // Check device orientation on load and when it changes
+    checkOrientation();
+    window.addEventListener('resize', checkOrientation);
     
-    // Video optimization variables
-    let lastFrameTime = 0; // Timestamp of the last frame sent
-    const TARGET_FPS = 10; // Target frames per second for normal operation
-    const BLINK_DETECTION_FPS = 20; // Higher FPS during blink detection to ensure accuracy
-    const ACTION_DETECTION_FPS = 15; // Medium FPS during action detection
-    const FRAME_INTERVAL = 1000 / TARGET_FPS; // Milliseconds between frames at target FPS
-    const BLINK_FRAME_INTERVAL = 1000 / BLINK_DETECTION_FPS; // Milliseconds between frames during blink detection
-    const ACTION_FRAME_INTERVAL = 1000 / ACTION_DETECTION_FPS; // Milliseconds between frames during action detection
-    let currentFrameInterval = FRAME_INTERVAL; // Current interval between frames (can change based on detection mode)
-    let videoQuality = 0.5; // JPEG quality (0.0 to 1.0) for normal operation
-    let blink_detection_active = true; // Flag to indicate if blink detection is currently active
-    let action_detection_active = true; // Flag to indicate if action detection is currently active
-    let networkQuality = 'medium'; // Estimated network quality: 'high', 'medium', or 'low'
-    let adaptiveQualityEnabled = true; // Enable adaptive quality based on network conditions
-    let lastNetworkCheckTime = 0; // Last time network quality was checked
-    const NETWORK_CHECK_INTERVAL = 2500; // Check network quality every 5 seconds
-    let frameTransmissionTimes = []; // Array to store frame transmission times for network quality estimation
-    let frameTransmissionLatencies = []; // Array to store frame transmission latencies
+    // Set up event listeners
+    resetButton.addEventListener('click', resetVerification);
     
-    // Network logging variables
-    let lastNetworkLogTime = 0; // Last time network stats were logged
-    const NETWORK_LOG_INTERVAL = 2000; // Log network stats every 2 seconds
-    let actualFps = 0; // Actual frames per second being achieved
-    let lastFpsUpdateTime = 0; // Last time FPS was calculated
-    let framesSinceLastFpsUpdate = 0; // Frames sent since last FPS calculation
+    // Start the verification process
+    initializeVerification();
+});
+
+// Check and update device orientation
+function checkOrientation() {
+    const prevOrientation = isPortrait;
+    isPortrait = window.innerHeight > window.innerWidth;
     
-    // Video resolution settings - UPDATED: added very_low and ultra_low settings
-    const RESOLUTION_SETTINGS = {
-        high: { width: 640, height: 480, quality: 0.7 },
-        medium: { width: 480, height: 360, quality: 0.5 },
-        low: { width: 320, height: 240, quality: 0.4 },
-        very_low: { width: 240, height: 180, quality: 0.3 }
-    };
-    let currentResolution = RESOLUTION_SETTINGS.medium; // Start with medium resolution
-    
-    // Audio processing variables
-    let audioContext = null; 
-    let scriptProcessor = null; 
-    let audioSource = null;
-    const bufferSize = 4096;
-    let audioSendCounter = 0; // Counter for audio chunks
-    const AUDIO_SEND_INTERVAL = 3; // Only send every Nth audio chunk to reduce bandwidth
-    
-    // Initialize the Socket.IO connection and set up event listeners
-    function initSocket() {
-        console.log('Initializing socket connection for verification');
-        
-        // Configure Socket.IO with optimized settings
-        socket = io({
-            reconnectionAttempts: 5,
-            reconnectionDelay: 1000,
-            timeout: 10000,
-            transports: ['websocket', 'polling']
+    // If orientation changed, notify the server
+    if (prevOrientation !== isPortrait && socket) {
+        socket.emit('orientation_change', {
+            isPortrait: isPortrait,
+            width: window.innerWidth,
+            height: window.innerHeight
         });
+        console.log(`Orientation changed to ${isPortrait ? 'portrait' : 'landscape'}`);
+    }
+    
+    // Update CSS classes for debug and partner frames if needed
+    const processedFrameContainer = document.getElementById('processed-frame-container');
+    if (processedFrameContainer) {
+        if (isPortrait) {
+            processedFrameContainer.classList.add('portrait-mode');
+        } else {
+            processedFrameContainer.classList.remove('portrait-mode');
+        }
+    }
+}
+
+// Initialize the verification process
+function initializeVerification() {
+    // Request camera access
+    navigator.mediaDevices.getUserMedia({ 
+        video: { 
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            facingMode: 'user'
+        }, 
+        audio: true 
+    })
+    .then(stream => {
+        webcam.srcObject = stream;
         
-        // When the socket connects to the server
-        socket.on('connect', () => {
-            console.log('Connected to server for verification');
+        // Set up canvas for overlay
+        overlay.width = webcam.videoWidth;
+        overlay.height = webcam.videoHeight;
+        overlay.style.display = 'block';
+        
+        // Wait for video to be ready
+        webcam.onloadedmetadata = () => {
+            console.log(`Video dimensions: ${webcam.videoWidth}x${webcam.videoHeight}`);
+            
+            // Join the verification session
             socket.emit('join_verification', { 
                 code: sessionCode,
                 clientInfo: {
                     userAgent: navigator.userAgent,
-                    screenWidth: window.innerWidth,
-                    screenHeight: window.innerHeight,
-                    networkType: navigator.connection ? navigator.connection.effectiveType : 'unknown'
+                    screenWidth: window.screen.width,
+                    screenHeight: window.screen.height,
+                    isPortrait: isPortrait
                 }
             });
-            socket.emit('get_debug_status'); // Request debug settings from the server
-        });
-        
-        // Handle debug status response from the server
-        socket.on('debug_status', (data) => {
-            isDebugMode = data.debug || true; // Set debug mode based on server config, default to true for testing
-            showDebugFrame = data.showDebugFrame; // Set whether to show debug frame
+            
+            // Request debug status
+            socket.emit('get_debug_status');
+            
+            // Start processing frames
+            isProcessing = true;
+            requestAnimationFrame(captureAndSendFrame);
+            
+            // Set up audio processing if needed
+            setupAudioProcessing(stream);
+        };
+    })
+    .catch(error => {
+        console.error('Error accessing camera:', error);
+        alert('Camera access is required for verification. Please allow access and try again.');
+    });
+    
+    // Set up Socket.IO event handlers
+    setupSocketHandlers();
+}
 
-            console.log(`Debug mode: ${isDebugMode}`);
-            
-            // Adjust UI visibility based on whether debug frame should be shown
-            if (showDebugFrame) {
-                console.log(`Show debug frame: ${showDebugFrame}`);
-                processedFrameContainer.classList.remove('hidden'); // Show the debug frame container
-                debugFrame.classList.remove('hidden'); // Show the debug frame element
-                videoContainer.classList.remove('single-video'); // Adjust layout for dual video display
-            } else {
-                processedFrameContainer.classList.add('hidden'); // Hide the debug frame container
-                debugFrame.classList.add('hidden'); // Hide the debug frame element
-                videoContainer.classList.add('single-video'); // Adjust layout for single video
-            }
-            
-            // Ensure debug frame is not loaded when not needed
-            if (!showDebugFrame) {
-                debugFrame.src = ''; // Clear the src to prevent loading broken image
-            }
-            
-            isProcessing = true; // Start processing frames
-            console.log('Processing started');
-            requestAnimationFrame(captureAndSendFrame); // Begin capturing and sending frames
-        });
+// Set up Socket.IO event handlers
+function setupSocketHandlers() {
+    // Handle connection event
+    socket.on('connect', () => {
+        console.log('Connected to server');
+    });
+    
+    // Handle challenge event
+    socket.on('challenge', (data) => {
+        challengeText.textContent = data.text;
+        resetStatusIndicators();
+    });
+    
+    // Handle debug status event
+    socket.on('debug_status', (data) => {
+        if (data.debug && data.showDebugFrame) {
+            document.getElementById('processed-frame-container').classList.remove('hidden');
+            debugFrame.classList.remove('hidden');
+        }
+    });
+    
+    // Handle processed frame event
+    socket.on('processed_frame', (data) => {
+        // Update challenge status
+        if (data.challenge) {
+            challengeText.textContent = data.challenge;
+        }
         
-        // Handle processed frame data from the server
-        socket.on('processed_frame', (data) => {
-            // Calculate frame latency for network quality monitoring
-            const now = performance.now();
-            if (data.timestamp) {
-                const latency = now - data.timestamp;
-                
-                // Keep only the last 10 latency measurements
-                if (frameTransmissionLatencies.length >= 10) {
-                    frameTransmissionLatencies.shift();
-                }
-                frameTransmissionLatencies.push(latency);
-            }
-            
-            // Log frame data every 30 frames if in debug mode
-            if (isDebugMode && frameCount % 30 === 0) {
-                console.log('Received processed_frame:', {
-                    hasImage: !!data.image, // Whether a regular image was received
-                    hasDebugImage: !!data.debug_image, // Whether a debug image was received
-                    challenge: data.challenge, // Current challenge text
-                    action: data.action_completed, // Action completion status
-                    word: data.word_completed, // Word completion status
-                    time: data.time_remaining, // Remaining time for the challenge
-                    result: data.verification_result, // Verification result (PASS, FAIL, PENDING)
-                    duress: data.duress_detected // Whether duress was detected
-                });
-            }
-            
-            // Update the debug frame or fallback to regular image
-            if (showDebugFrame && data.debug_image) {
-                debugFrame.src = data.debug_image; // Set debug frame source to the processed debug image
-                processedFrameContainer.classList.add('visible'); // Make debug container visible
-                videoContainer.classList.add('double-video'); // Adjust layout for two videos
-            } else if (data.image) {
-                debugFrame.src = data.image; // Use regular image as fallback if no debug image
-                if (!showDebugFrame) {
-                    processedFrameContainer.classList.remove('visible'); // Hide debug container if not in debug mode
-                    videoContainer.classList.remove('double-video'); // Adjust layout for single video
-                }
-            }
+        // Update status indicators
+        actionStatus.innerHTML = data.action_completed ? '✅' : '❌';
+        wordStatus.innerHTML = data.word_completed ? '✅' : '❌';
+        blinkStatus.innerHTML = data.blink_completed ? '✅' : '❌';
+        timeRemaining.textContent = `${Math.ceil(data.time_remaining)}s`;
         
-            // Update challenge text on the UI
-            if (data.challenge) {
-                challengeText.textContent = data.challenge; // Display the current challenge
-                
-                // Check if this challenge involves blink detection or action detection
-                blink_detection_active = data.challenge.toLowerCase().includes('blink');
-                action_detection_active = data.challenge.toLowerCase().includes('turn') || 
-                                         data.challenge.toLowerCase().includes('look');
-                
-                // Adjust frame rate based on detection mode
-                if (blink_detection_active) {
-                    currentFrameInterval = BLINK_FRAME_INTERVAL;
-                    if (isDebugMode) {
-                        console.log('Blink detection active - increasing frame rate to 15 FPS');
-                    }
-                } else if (action_detection_active) {
-                    currentFrameInterval = ACTION_FRAME_INTERVAL;
-                    if (isDebugMode) {
-                        console.log('Action detection active - setting frame rate to 12 FPS');
-                    }
-                } else {
-                    currentFrameInterval = FRAME_INTERVAL;
-                    if (isDebugMode) {
-                        console.log('Standard mode - setting frame rate to 10 FPS');
-                    }
-                }
-            } else {
-                challengeText.textContent = 'Waiting for challenge...'; // Default message if no challenge
-                blink_detection_active = false;
-                action_detection_active = false;
-                currentFrameInterval = FRAME_INTERVAL;
+        // Calculate latency
+        if (data.timestamp) {
+            const latency = performance.now() - data.timestamp;
+            if (frameTransmissionLatencies.length >= 10) {
+                frameTransmissionLatencies.shift();
             }
+            frameTransmissionLatencies.push(latency);
+        }
+        
+        // Update processed frame if available
+        if (data.image) {
+            processedFrame.src = data.image;
+        }
+        
+        // Update debug frame if available
+        if (data.debug_image) {
+            debugFrame.src = data.debug_image;
+        }
+        
+        // Handle verification result
+        if (data.exit_flag && data.verification_result !== 'PENDING') {
+            isProcessing = false; // Stop processing
             
-            // Update action, word, and blink completion status indicators
-            actionStatus.textContent = data.action_completed ? '✅' : '❌'; // Green check or red X
-            wordStatus.textContent = data.word_completed ? '✅' : '❌'; // Green check or red X
-            
-            // Update blink status if element exists
-            const blinkStatus = document.getElementById('blink-status');
-            if (blinkStatus) {
-                blinkStatus.textContent = data.blink_completed ? '✅' : '❌'; // Green check or red X
-            }
-            
-            // Update remaining time display
-            if (data.time_remaining !== undefined) {
-                timeRemaining.textContent = Math.max(0, Math.ceil(data.time_remaining)) + 's'; // Show time left, min 0
-            }
-            
-            // Handle verification result when it's not pending
-            if (data.verification_result !== 'PENDING') {
-                isProcessing = false; // Stop capturing new frames
-                frameTransmissionLatencies = []; // Reset latency stats to avoid skew
-                frameTransmissionTimes = [];
-                
-                // Set all status indicators to green checkmarks if verification passed
-                if (data.verification_result === 'PASS') {
-                    actionStatus.textContent = '✅';
-                    wordStatus.textContent = '✅';
-                    const blinkStatus = document.getElementById('blink-status');
-                    if (blinkStatus) {
-                        blinkStatus.textContent = '✅';
-                    }
-                }
-                
-                // Freeze the video and overlay the result
-                video.pause(); // Pause the live video feed
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height); // Draw the last frame on the canvas
-                canvas.style.display = 'block'; // Show the canvas over the video
-                
-                // Determine the result message and color
-                let resultMessage, textColor;
+            if (data.verification_result === 'PASS') {
+                resultText.textContent = 'Verification Successful!';
+                resultText.className = 'result-text success';
+                applyVideoEffect('success');
+            } else if (data.verification_result === 'FAIL') {
                 if (data.duress_detected) {
-                    resultMessage = 'Duress Detected!'; // Message for duress detection
-                    textColor = '#ff0000'; // Red color
-                    applyVideoEffect('duress'); // Apply duress visual effect
-                } else if (data.verification_result === 'PASS') {
-                    resultMessage = 'Verification Successful!'; // Success message
-                    textColor = '#4cd137'; // Green color
-                    applyVideoEffect('success'); // Apply success visual effect
+                    resultText.textContent = 'Duress Detected! Verification Failed.';
+                    resultText.className = 'result-text duress';
+                    applyVideoEffect('duress');
                 } else {
-                    resultMessage = 'Verification Failed!'; // Failure message
-                    textColor = '#e8603e'; // Orange-red color
-                    applyVideoEffect('failure'); // Apply failure visual effect
+                    resultText.textContent = 'Verification Failed!';
+                    resultText.className = 'result-text failure';
+                    applyVideoEffect('failure');
                 }
-                
-                // Draw a semi-transparent background for the result text
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                ctx.fillRect(0, canvas.height / 2 - 40, canvas.width, 80);
-                // Draw the result text on the canvas
-                ctx.fillStyle = textColor;
-                ctx.font = 'bold 30px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText(resultMessage, canvas.width / 2, canvas.height / 2 + 10);
-                
-                // Update the result container in the UI
-                resultText.textContent = resultMessage;
-                resultText.className = `result-text ${data.duress_detected ? 'duress' : data.verification_result === 'PASS' ? 'success' : 'failure'}`;
-                resultContainer.classList.remove('hidden'); // Show the result container
-                
-                verificationAttempts++; // Increment the attempt counter
-                console.log(`Attempt ${verificationAttempts} of ${MAX_VERIFICATION_ATTEMPTS}`);
-                
-                // Handle final outcomes or reset for next attempt
-                if (data.verification_result === 'PASS' || data.duress_detected || verificationAttempts >= MAX_VERIFICATION_ATTEMPTS) {
-                    setTimeout(() => window.location.href = '/', 3000); // Redirect to home after 3 seconds
-                } else {
-                    // Use a longer delay (3 seconds) to account for the transition animation
-                    setTimeout(() => {
-                        isProcessing = true; // Resume processing
-                        frameTransmissionLatencies = []; // Reset again here to ensure fresh measurements
-                        frameTransmissionTimes = [];
-
-                        canvas.style.display = 'none'; // Hide the canvas
-                        video.play(); // Resume the video
-                        removeVideoEffect(); // Remove visual effect
-                        
-                        // Update challenge text to indicate transition
-                        challengeText.textContent = 'Preparing new challenge...';
-                        
-                        // Add additional delay before starting the next challenge to compensate for animation time
-                        setTimeout(() => {
-                            requestAnimationFrame(captureAndSendFrame); // Start capturing frames again
-                        }, 2000); // Additional 2 second delay before starting next challenge
-                    }, 1000); // Initial 1 second delay
-                }
-            } else if (isProcessing) {
-                // Calculate frame transmission time for network quality estimation
-                const now = performance.now();
-                if (frameTransmissionTimes.length > 0) {
-                    const lastTransmissionTime = frameTransmissionTimes[frameTransmissionTimes.length - 1];
-                    const transmissionTime = now - lastTransmissionTime;
-                    
-                    // Keep only the last 10 transmission times
-                    if (frameTransmissionTimes.length >= 10) {
-                        frameTransmissionTimes.shift();
-                    }
-                    frameTransmissionTimes.push(now);
-                    
-                    // Check network quality periodically
-                    if (now - lastNetworkCheckTime > NETWORK_CHECK_INTERVAL) {
-                        updateNetworkQuality();
-                        lastNetworkCheckTime = now;
-                    }
-                } else {
-                    frameTransmissionTimes.push(now);
-                }
-                
-                requestAnimationFrame(captureAndSendFrame); // Continue capturing if still processing
             }
             
-            // Handle timeout when time runs out but result is still pending
-            if (data.time_remaining <= 0 && data.verification_result === 'PENDING') {
-                socket.emit('reset', { code: sessionCode }); // Request a reset from the server
-                verificationAttempts++; // Increment attempt counter
-                
-                if (verificationAttempts >= MAX_VERIFICATION_ATTEMPTS) {
-                    // If max attempts reached, show failure and redirect
-                    resultText.textContent = 'Maximum attempts reached. Verification failed.';
-                    resultText.className = 'result-text failure';
-                    resultContainer.classList.remove('hidden');
-                    isProcessing = false;
-
-                    frameTransmissionLatencies = []; // Reset latency stats
-                    frameTransmissionTimes = [];
-
-                    applyVideoEffect('failure');
-                    setTimeout(() => window.location.href = '/', 3000); // Redirect after 3 seconds
-                } else {
-                    // Show attempt number and wait for new challenge
-                    challengeText.textContent = `Attempt ${verificationAttempts + 1} of ${MAX_VERIFICATION_ATTEMPTS}...`;
+            resultContainer.classList.remove('hidden');
+            
+            // Reset stats
+            frameTransmissionLatencies = [];
+            frameTransmissionTimes = [];
+            
+            // Add delay before redirect on success
+            if (data.verification_result === 'PASS') {
+                setTimeout(() => {
+                    removeVideoEffect(); // Remove visual effect
+                    
+                    // Update challenge text to indicate transition
+                    challengeText.textContent = 'Preparing new challenge...';
+                    
+                    // Add additional delay before starting the next challenge to compensate for animation time
                     setTimeout(() => {
-                        challengeText.textContent = 'Waiting for new challenge...';
-                        isProcessing = true;
-                        requestAnimationFrame(captureAndSendFrame); // Resume frame capture
-                    }, 2000); // Wait 2 seconds before resuming
-                }
+                        requestAnimationFrame(captureAndSendFrame); // Start capturing frames again
+                    }, 2000); // Additional 2 second delay before starting next challenge
+                }, 1000); // Initial 1 second delay
             }
-        });
+        } else if (isProcessing) {
+            // Calculate frame transmission time for network quality estimation
+            const now = performance.now();
+            if (frameTransmissionTimes.length > 0) {
+                const lastTransmissionTime = frameTransmissionTimes[frameTransmissionTimes.length - 1];
+                const transmissionTime = now - lastTransmissionTime;
+                
+                // Keep only the last 10 transmission times
+                if (frameTransmissionTimes.length >= 10) {
+                    frameTransmissionTimes.shift();
+                }
+                frameTransmissionTimes.push(now);
+                
+                // Check network quality periodically
+                if (now - lastNetworkCheckTime > NETWORK_CHECK_INTERVAL) {
+                    updateNetworkQuality();
+                    lastNetworkCheckTime = now;
+                }
+            } else {
+                frameTransmissionTimes.push(now);
+            }
+            
+            requestAnimationFrame(captureAndSendFrame); // Continue capturing if still processing
+        }
         
-        // Handle network quality update from server
-        socket.on('network_quality', (data) => {
+        // Handle timeout when time runs out but result is still pending
+        if (data.time_remaining <= 0 && data.verification_result === 'PENDING') {
+            socket.emit('reset', { code: sessionCode }); // Request a reset from the server
+            verificationAttempts++; // Increment attempt counter
+            
+            if (verificationAttempts >= MAX_VERIFICATION_ATTEMPTS) {
+                // If max attempts reached, show failure and redirect
+                resultText.textContent = 'Maximum attempts reached. Verification failed.';
+                resultText.className = 'result-text failure';
+                resultContainer.classList.remove('hidden');
+                isProcessing = false;
+
+                frameTransmissionLatencies = []; // Reset latency stats
+                frameTransmissionTimes = [];
+
+                applyVideoEffect('failure');
+                setTimeout(() => window.location.href = '/', 3000); // Redirect after 3 seconds
+            } else {
+                // Show attempt number and wait for new challenge
+                challengeText.textContent = `Attempt ${verificationAttempts + 1} of ${MAX_VERIFICATION_ATTEMPTS}...`;
+                setTimeout(() => {
+                    challengeText.textContent = 'Waiting for new challenge...';
+                    isProcessing = true;
+                    requestAnimationFrame(captureAndSendFrame); // Resume frame capture
+                }, 2000); // Wait 2 seconds before resuming
+            }
+        }
+    });
+    
+    // Handle network quality update from server
+    socket.on('network_quality', (data) => {
         if (data.quality && data.quality !== stableNetworkQuality) {
             const serverQualityIndex = qualityOrder.indexOf(data.quality);
             const clientQualityIndex = qualityOrder.indexOf(stableNetworkQuality);
@@ -379,402 +308,280 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     });
-        
-        // Handle server errors
-        socket.on('error', (data) => {
-            console.error('Server error:', data.message);
-            alert('Server error: ' + data.message); // Alert the user
-        });
-        
-        // Handle max attempts reached event from server
-        socket.on('max_attempts_reached', () => {
-            isProcessing = false; // Stop processing
-            resultText.textContent = 'Maximum verification attempts reached.';
-            resultContainer.classList.remove('hidden');
-            applyVideoEffect('failure');
-            setTimeout(() => window.location.href = '/', 5000); // Redirect after 5 seconds
-        });
-        
-        // Handle disconnection from the server
-        socket.on('disconnect', () => {
-            console.log('Disconnected from server');
-            isProcessing = false; // Stop processing on disconnect
+    
+    // Handle server errors
+    socket.on('error', (data) => {
+        console.error('Server error:', data.message);
+        alert('Server error: ' + data.message); // Alert the user
+    });
+    
+    // Handle max attempts reached event from server
+    socket.on('max_attempts_reached', () => {
+        isProcessing = false; // Stop processing
+        resultText.textContent = 'Maximum verification attempts reached.';
+        resultContainer.classList.remove('hidden');
+        applyVideoEffect('failure');
+        setTimeout(() => window.location.href = '/', 5000); // Redirect after 5 seconds
+    });
+    
+    // Handle disconnection from the server
+    socket.on('disconnect', () => {
+        console.log('Disconnected from server');
+        isProcessing = false; // Stop processing
+        alert('Disconnected from server. Please refresh the page to reconnect.');
+    });
+    
+    // Handle reset confirmation from server
+    socket.on('reset_confirmed', () => {
+        console.log('Reset confirmed by server');
+        resetStatusIndicators();
+    });
+    
+    // Handle partner video frame
+    socket.on('partner_video_frame', (data) => {
+        // If we have a partner video element, update it
+        const partnerVideo = document.getElementById('partner-video');
+        if (partnerVideo && data.image) {
+            partnerVideo.src = data.image;
             
-            // Attempt to reconnect after a delay
-            setTimeout(() => {
-                if (!socket.connected) {
-                    console.log('Attempting to reconnect...');
-                    socket.connect();
-                }
-            }, 3000);
-        });
-        
-        // Handle new challenge text from the server
-        socket.on('challenge', (data) => {
-            if (data && data.text) {
-                challengeText.textContent = data.text; // Update challenge text
-                
-                // Check if this challenge involves blink detection or action detection
-                blink_detection_active = data.text.toLowerCase().includes('blink');
-                action_detection_active = data.text.toLowerCase().includes('turn') || 
-                                         data.text.toLowerCase().includes('look');
-                
-                // Adjust frame rate based on detection mode
-                if (blink_detection_active) {
-                    currentFrameInterval = BLINK_FRAME_INTERVAL;
-                    console.log('Blink detection active - increasing frame rate to 15 FPS');
-                } else if (action_detection_active) {
-                    currentFrameInterval = ACTION_FRAME_INTERVAL;
-                    console.log('Action detection active - setting frame rate to 12 FPS');
+            // Update partner video container with orientation class if needed
+            const partnerContainer = partnerVideo.parentElement;
+            if (partnerContainer) {
+                if (data.isPortrait) {
+                    partnerContainer.classList.add('portrait-mode');
                 } else {
-                    currentFrameInterval = FRAME_INTERVAL;
-                    console.log('Standard mode - setting frame rate to 10 FPS');
+                    partnerContainer.classList.remove('portrait-mode');
                 }
-                
-                // Send network quality information to server
-                socket.emit('client_network_quality', { 
-                    quality: networkQuality,
-                    latency: calculateAverageLatency()
-                });
             }
-        });
-    }
-    
-    // Calculate average latency from stored measurements
-    function calculateAverageLatency() {
-        if (frameTransmissionLatencies.length === 0) return 0;
-        
-        const sum = frameTransmissionLatencies.reduce((a, b) => a + b, 0);
-        return Math.round(sum / frameTransmissionLatencies.length);
-    }
-    
-    // Apply visual effects to the video container based on verification result
-    function applyVideoEffect(effect) {
-        if (effect === 'success') {
-            videoContainer.classList.add('success-overlay'); // Green overlay for success
-        } else if (effect === 'failure') {
-            videoContainer.classList.add('failure-overlay'); // Red overlay for failure
-        } else if (effect === 'duress') {
-            videoContainer.classList.add('duress-overlay'); // Special overlay for duress
         }
-    }
-    
-    // Remove all visual effects from the video container
-    function removeVideoEffect() {
-        videoContainer.classList.remove('success-overlay', 'failure-overlay', 'duress-overlay');
-    }
-    
-    // Update network quality based on frame transmission times and latencies
-    function updateNetworkQuality() {
-        if (frameTransmissionTimes.length < 2) return;
-        
-        // Calculate average transmission time
-        let totalTime = 0;
-        for (let i = 1; i < frameTransmissionTimes.length; i++) {
-            totalTime += frameTransmissionTimes[i] - frameTransmissionTimes[i-1];
-        }
-        const avgTime = totalTime / (frameTransmissionTimes.length - 1);
-        
-        // Calculate average latency if available
-        const avgLatency = calculateAverageLatency();
-        
-        // Calculate estimated bandwidth (very rough approximation)
-        const avgFrameSize = currentResolution.width * currentResolution.height * 3 * videoQuality; // Rough estimate of frame size in bytes
-        const estimatedBandwidth = avgFrameSize / (avgTime / 1000); // Bytes per second
-        const estimatedKbps = Math.round(estimatedBandwidth * 8 / 1000); // Convert to Kbps
-        
-        // Determine network quality based on average transmission time and latency
-        // UPDATED: More granular network quality levels with very_low and ultra_low
-        let newQuality;
-        if (avgTime < 50 && avgLatency < 100) {
-            newQuality = 'high';
-        } else if (avgTime < 150 && avgLatency < 200) {
-            newQuality = 'medium';
-        } else if (avgTime < 250 && avgLatency < 300) {
-            newQuality = 'low';
-        } else  {
-            newQuality = 'very_low';
-        }
-        
-        // Always log network stats periodically, regardless of quality changes
-        const now = performance.now();
-        if (now - lastNetworkLogTime > NETWORK_LOG_INTERVAL) {
-            // Calculate actual FPS
-            if (now - lastFpsUpdateTime > 1000) { // Update FPS once per second
-                actualFps = Math.round((framesSinceLastFpsUpdate * 1000) / (now - lastFpsUpdateTime));
-                lastFpsUpdateTime = now;
-                framesSinceLastFpsUpdate = 0;
-            }
-            
-            // Update network status display
-            updateNetworkStatusDisplay(newQuality, avgTime, avgLatency, estimatedKbps, actualFps);
-            
-            console.log(`Network stats: quality=${newQuality}, avg_time=${avgTime.toFixed(2)}ms, latency=${avgLatency.toFixed(2)}ms, est_bandwidth=${estimatedKbps}Kbps, actual_fps=${actualFps}`);
-            lastNetworkLogTime = now;
-        }
-         
-        const currentQualityIndex = qualityOrder.indexOf(networkQuality);
-        const newQualityIndex = qualityOrder.indexOf(newQuality);
+    });
+}
 
-        if (newQualityIndex < currentQualityIndex) {
-            // Immediate downgrade
-            stableNetworkQuality = newQuality;
+// Capture and send a frame to the server
+function captureAndSendFrame() {
+    if (!isProcessing || !webcam.videoWidth) return;
+    
+    try {
+        // Draw the current frame to the canvas
+        overlayContext.drawImage(webcam, 0, 0, overlay.width, overlay.height);
+        
+        // Get the frame data as a data URL
+        const frameData = overlay.toDataURL('image/jpeg', 0.7);
+        
+        // Send the frame to the server
+        socket.emit('process_frame', {
+            image: frameData,
+            code: sessionCode,
+            timestamp: performance.now(),
+            networkQuality: currentNetworkQuality,
+            isPortrait: isPortrait,
+            detectionMode: 'normal'
+        });
+    } catch (error) {
+        console.error('Error capturing frame:', error);
+    }
+}
+
+// Set up audio processing
+function setupAudioProcessing(stream) {
+    // Create audio context
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioContext.createMediaStreamSource(stream);
+    const processor = audioContext.createScriptProcessor(4096, 1, 1);
+    
+    // Connect the processor
+    source.connect(processor);
+    processor.connect(audioContext.destination);
+    
+    // Process audio data
+    processor.onaudioprocess = (e) => {
+        if (!isProcessing) return;
+        
+        // Get audio data
+        const inputData = e.inputBuffer.getChannelData(0);
+        
+        // Convert to 16-bit PCM
+        const pcmData = new Int16Array(inputData.length);
+        for (let i = 0; i < inputData.length; i++) {
+            pcmData[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
+        }
+        
+        // Send audio chunk to server
+        socket.emit('audio_chunk', {
+            audio: arrayBufferToBase64(pcmData.buffer)
+        });
+    };
+}
+
+// Convert ArrayBuffer to Base64
+function arrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+}
+
+// Reset status indicators
+function resetStatusIndicators() {
+    actionStatus.innerHTML = '❌';
+    wordStatus.innerHTML = '❌';
+    blinkStatus.innerHTML = '❌';
+}
+
+// Reset verification
+function resetVerification() {
+    socket.emit('reset', { code: sessionCode });
+    resultContainer.classList.add('hidden');
+    isProcessing = true;
+    removeVideoEffect();
+    requestAnimationFrame(captureAndSendFrame);
+}
+
+// Update network quality based on latency
+function updateNetworkQuality() {
+    if (frameTransmissionLatencies.length === 0) return;
+    
+    // Calculate average latency
+    const avgLatency = frameTransmissionLatencies.reduce((a, b) => a + b, 0) / frameTransmissionLatencies.length;
+    
+    // Determine quality level based on latency
+    let newQuality;
+    if (avgLatency > 500) {
+        newQuality = 'very_low';
+    } else if (avgLatency > 300) {
+        newQuality = 'low';
+    } else if (avgLatency > 150) {
+        newQuality = 'medium';
+    } else {
+        newQuality = 'high';
+    }
+    
+    // Only upgrade quality if it's been stable for a while
+    const now = performance.now();
+    const timeSinceLastChange = now - lastQualityChangeTime;
+    
+    if (qualityOrder.indexOf(newQuality) > qualityOrder.indexOf(currentNetworkQuality)) {
+        // Upgrading quality requires stability
+        if (timeSinceLastChange > QUALITY_STABILITY_THRESHOLD) {
+            currentNetworkQuality = newQuality;
             lastQualityChangeTime = now;
-            applyQualitySettings(newQuality);
-            console.log(`Immediately downgraded quality to: ${newQuality}`);
-        } else if (newQualityIndex > currentQualityIndex) {
-            // Delay upgrades until stable
-            if (now - lastQualityChangeTime > QUALITY_UPGRADE_DELAY) {
-                stableNetworkQuality = newQuality;
-                lastQualityChangeTime = now;
-                applyQualitySettings(newQuality);
-                console.log(`Quality upgraded to: ${newQuality} after stability delay`);
-            } else {
-                console.log(`Delaying upgrade to ${newQuality}, waiting for stability...`);
-            }
+            console.log(`Network quality upgraded to: ${newQuality} (Latency: ${avgLatency.toFixed(0)}ms)`);
         }
+    } else if (qualityOrder.indexOf(newQuality) < qualityOrder.indexOf(currentNetworkQuality)) {
+        // Downgrading quality happens immediately
+        currentNetworkQuality = newQuality;
+        lastQualityChangeTime = now;
+        console.log(`Network quality downgraded to: ${newQuality} (Latency: ${avgLatency.toFixed(0)}ms)`);
     }
     
-    // Update the network status display element
-    function updateNetworkStatusDisplay(quality, avgTime, avgLatency, estimatedKbps, actualFps) {
-        // Set color based on quality
-        let qualityColor;
-        switch(quality) {
-            case 'high': qualityColor = '#4cd137'; break; // Green
-            case 'medium': qualityColor = '#fbc531'; break; // Yellow
-            case 'low': qualityColor = '#e84118'; break; // Red
-            case 'very_low': qualityColor = '#c23616'; break; // Dark red
-            case 'ultra_low': qualityColor = '#8c0000'; break; // Very dark red
-            default: qualityColor = '#7f8fa6'; // Gray
-        }
-        
-        // Update the display
-        networkStatusContainer.innerHTML = `
-            <div style="font-weight: bold; color: ${qualityColor};">Network: ${quality.toUpperCase()}</div>
-            <div>Latency: ${avgLatency.toFixed(0)}ms</div>
-            <div>Bandwidth: ~${estimatedKbps}Kbps</div>
-            <div>FPS: ${actualFps}</div>
-            <div>Resolution: ${currentResolution.width}x${currentResolution.height}</div>
-            <div>Quality: ${Math.round(videoQuality * 100)}%</div>
-        `;
-    }
-    
-    // Create a downscaled version of the video frame
-    function createScaledFrame(sourceCanvas, targetWidth, targetHeight) {
-        const scaledCanvas = document.createElement('canvas');
-        scaledCanvas.width = targetWidth;
-        scaledCanvas.height = targetHeight;
-        const scaledCtx = scaledCanvas.getContext('2d');
-        
-        // Draw the source canvas onto the scaled canvas
-        scaledCtx.drawImage(sourceCanvas, 0, 0, sourceCanvas.width, sourceCanvas.height, 
-                           0, 0, targetWidth, targetHeight);
-        
-        return scaledCanvas;
-    }
-    
-    // Capture a frame from the webcam and send it to the server
-    function captureAndSendFrame() {
-        // Ensure the video is ready before attempting to capture
-        if (video.readyState < 2) {
-            requestAnimationFrame(captureAndSendFrame);
-            return;
-        }
-    
-        if (!isProcessing) {
-            console.log('Processing stopped, not capturing frame');
-            return;
-        }
-    
-        const now = performance.now();
-        const timeSinceLastFrame = now - lastFrameTime;
-    
-        if (timeSinceLastFrame < currentFrameInterval) {
-            requestAnimationFrame(captureAndSendFrame);
-            return;
-        }
-    
-        lastFrameTime = now;
-    
-        try {
-            const rect = video.getBoundingClientRect();
-            const offscreenCanvas = document.createElement('canvas');
-            offscreenCanvas.width = rect.width;
-            offscreenCanvas.height = rect.height;
-            const offscreenCtx = offscreenCanvas.getContext('2d');
-            
-            offscreenCtx.drawImage(video, 0, 0, rect.width, rect.height);
-    
-            const scaledCanvas = createScaledFrame(
-                offscreenCanvas,
-                currentResolution.width,
-                currentResolution.height
-            );
-    
-            const imageData = scaledCanvas.toDataURL('image/jpeg', videoQuality);
-    
-            if (isDebugMode && frameCount % 30 === 0) {
-                console.log(`Sending frame #${frameCount} (${currentResolution.width}x${currentResolution.height}, quality: ${videoQuality})`);
-            }
-    
-            socket.emit('process_frame', {
-                image: imageData,
-                code: sessionCode,
-                timestamp: now,
-                networkQuality: networkQuality,
-                detectionMode: blink_detection_active ? 'blink' :
-                    action_detection_active ? 'action' : 'normal'
-            });
-    
-            frameCount++;
-            framesSinceLastFpsUpdate++;
-        } catch (err) {
-            console.error('Error capturing frame:', err);
-        }
-    
-        // Schedule the next frame
-        requestAnimationFrame(captureAndSendFrame);
-    }
-    
-
-    function applyQualitySettings(quality) {
-        currentResolution = RESOLUTION_SETTINGS[quality];
-        videoQuality = currentResolution.quality;
-        networkQuality = quality; // update the active quality used elsewhere
-    
-        if (socket && socket.connected) {
-            socket.emit('client_network_quality', { 
-                quality: networkQuality,
-                latency: calculateAverageLatency()
-            });
-        }
-    }
-    
-    // Initialize the webcam and start the video feed
-    async function initWebcam() {
-        try {
-            // Request access to the user's webcam and microphone
-            stream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    width: { ideal: 640 }, // Ideal video width
-                    height: { ideal: 480 }, // Ideal video height
-                    facingMode: 'user' // Use the front-facing camera
-                },
-                audio: true // Enable audio for speech detection
-            });
-            video.srcObject = stream; // Set the video source to the webcam stream
-            video.onloadedmetadata = () => { // When video metadata is loaded
-                video.play().catch(err => console.error('Error playing video:', err)); // Start playing the video
-                canvas.width = video.videoWidth; // Set canvas size to match video
-                canvas.height = video.videoHeight;
-                
-                // --- Start Audio Processing ---
-                if (stream.getAudioTracks().length > 0) {
-                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                    // Ensure the sample rate matches your PocketSphinx config (e.g., 48000)
-                    if (audioContext.sampleRate !== 48000) { 
-                        console.warn(`AudioContext sample rate (${audioContext.sampleRate}) doesn't match target (48000). Resampling might be needed or PocketSphinx config adjusted.`);
-                    }
-                    
-                    // log the audio sample rate
-                    if (isDebugMode) {
-                        console.log(`Audio sample rate: ${audioContext.sampleRate}`); 
-                    }
-                    audioSource = audioContext.createMediaStreamSource(stream);
-                    scriptProcessor = audioContext.createScriptProcessor(bufferSize, 1, 1); // bufferSize, inputChannels=1, outputChannels=1
-
-                    scriptProcessor.onaudioprocess = (audioProcessingEvent) => {
-                        if (!isProcessing) return; // Only process if verification is active
-
-                        // Increment audio send counter
-                        audioSendCounter = (audioSendCounter + 1) % AUDIO_SEND_INTERVAL;
-                        
-                        // Only send every Nth audio chunk to reduce bandwidth
-                        if (audioSendCounter !== 0) return;
-
-                        const inputBuffer = audioProcessingEvent.inputBuffer;
-                        const inputData = inputBuffer.getChannelData(0); // Get audio data from the first channel
-
-                        // Convert Float32Array to Int16Array (PCM format expected by PocketSphinx)
-                        const output = new Int16Array(inputData.length);
-                        for (let i = 0; i < inputData.length; i++) {
-                            output[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
-                        }
-                        
-                        // Convert Int16Array buffer to Base64 string to send via Socket.IO
-                        const audioBase64 = btoa(String.fromCharCode.apply(null, new Uint8Array(output.buffer)));
-
-                        // Send the audio chunk to the server
-                        if (socket && socket.connected) {
-                            socket.emit('audio_chunk', { 
-                                audio: audioBase64,
-                                timestamp: performance.now()
-                            });
-                        }
-                    };
-
-                    audioSource.connect(scriptProcessor);
-                    scriptProcessor.connect(audioContext.destination); // Connect to output (necessary even if not playing back)
-                    console.log("Audio processing setup complete.");
-                } else {
-                    console.warn("No audio track found in the stream.");
-                }
-                // --- End Audio Processing ---
-
-                requestAnimationFrame(captureAndSendFrame); // Start capturing frames
-            };
-        } catch (err) {
-            console.error('Error accessing webcam:', err); // Log webcam access errors
-            alert('Error accessing webcam: ' + err.message); // Alert the user
-        }
-    }
-
-    // Add cleanup for audio resources
-    window.addEventListener('beforeunload', () => {
-        if (socket && socket.connected) {
-            socket.disconnect(); 
-        }
-        if (stream) {
-            stream.getTracks().forEach(track => track.stop()); 
-        }
-        // --- Stop Audio Processing ---
-        if (scriptProcessor) {
-            scriptProcessor.disconnect();
-        }
-        if (audioSource) {
-            audioSource.disconnect();
-        }
-        if (audioContext) {
-            audioContext.close();
-        }
-        // --- End Stop Audio Processing ---
+    // Send network quality to server
+    socket.emit('client_network_quality', {
+        quality: currentNetworkQuality,
+        latency: avgLatency
     });
+}
+
+// Apply quality settings
+function applyQualitySettings(quality) {
+    // Apply quality settings based on level
+    switch (quality) {
+        case 'very_low':
+            // Very low quality settings
+            break;
+        case 'low':
+            // Low quality settings
+            break;
+        case 'medium':
+            // Medium quality settings
+            break;
+        case 'high':
+            // High quality settings
+            break;
+    }
+}
+
+// Apply video effect based on verification result
+function applyVideoEffect(effect) {
+    const container = document.querySelector('.video-container');
+    if (!container) return;
     
-    // Add click event listener to the reset button
-    resetButton.addEventListener('click', () => {
-        if (socket && socket.connected) { // Check if socket is connected
-            socket.emit('reset', { code: sessionCode }); // Request a reset from the server
-            isProcessing = true; // Resume processing
-            removeVideoEffect(); // Clear any visual effects
-            requestAnimationFrame(captureAndSendFrame); // Start capturing frames again
+    // Remove any existing effects
+    removeVideoEffect();
+    
+    // Apply the new effect
+    switch (effect) {
+        case 'success':
+            container.classList.add('success-overlay');
+            break;
+        case 'failure':
+            container.classList.add('failure-overlay');
+            break;
+        case 'duress':
+            container.classList.add('duress-overlay');
+            break;
+    }
+}
+
+// Remove video effect
+function removeVideoEffect() {
+    const container = document.querySelector('.video-container');
+    if (!container) return;
+    
+    container.classList.remove('success-overlay', 'failure-overlay', 'duress-overlay');
+}
+
+// Create a scaled frame for sending to the server
+function createScaledFrame(sourceCanvas, quality, isPortrait) {
+    // Create a new canvas for the scaled frame
+    const scaledCanvas = document.createElement('canvas');
+    const ctx = scaledCanvas.getContext('2d');
+    
+    // Set dimensions based on quality and orientation
+    let width, height;
+    if (isPortrait) {
+        // In portrait mode, swap width and height to maintain aspect ratio (3:4)
+        switch (quality) {
+            case 'very_low':
+                width = 180; height = 240;
+                break;
+            case 'low':
+                width = 240; height = 320;
+                break;
+            case 'medium':
+                width = 360; height = 480;
+                break;
+            case 'high':
+            default:
+                width = 480; height = 640;
+                break;
         }
-    });
-    
-    // Initialize the application
-    function init() {
-        initSocket(); // Set up the socket connection
-        initWebcam(); // Start the webcam
+    } else {
+        // In landscape mode, use original 4:3 aspect ratio
+        switch (quality) {
+            case 'very_low':
+                width = 240; height = 180;
+                break;
+            case 'low':
+                width = 320; height = 240;
+                break;
+            case 'medium':
+                width = 480; height = 360;
+                break;
+            case 'high':
+            default:
+                width = 640; height = 480;
+                break;
+        }
     }
     
-    // Clean up resources when the page is unloaded
-    window.addEventListener('beforeunload', () => {
-        if (socket && socket.connected) {
-            socket.disconnect(); // Disconnect from the server
-        }
-        if (stream) {
-            stream.getTracks().forEach(track => track.stop()); // Stop all webcam tracks
-        }
-    });
+    // Set canvas dimensions
+    scaledCanvas.width = width;
+    scaledCanvas.height = height;
     
-    init(); // Run the initialization function
-});
+    // Draw the source canvas onto the scaled canvas
+    ctx.drawImage(sourceCanvas, 0, 0, width, height);
+    
+    return scaledCanvas.toDataURL('image/jpeg', 0.7);
+}
