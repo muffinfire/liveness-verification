@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let stableNetworkQuality = 'medium'; // Tracks the stable quality
     let lastQualityChangeTime = performance.now(); // Timestamp of last quality change
     const QUALITY_UPGRADE_DELAY = 5000; // Delay (5 sec) before upgrading
+    const qualityOrder = ['very_low', 'low', 'medium', 'high'];
     
     // Create network status display element
     const networkStatusContainer = document.createElement('div');
@@ -512,7 +513,6 @@ document.addEventListener('DOMContentLoaded', () => {
             lastNetworkLogTime = now;
         }
          
-        const qualityOrder = ['very_low', 'low', 'medium', 'high'];
         const currentQualityIndex = qualityOrder.indexOf(networkQuality);
         const newQualityIndex = qualityOrder.indexOf(newQuality);
 
