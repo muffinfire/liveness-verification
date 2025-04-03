@@ -10,6 +10,9 @@ class Config:
     # Show debug frame with eye tracking polygons, EAR values, etc.
     SHOW_DEBUG_FRAME = True  # UPDATED: Set to True for testing
 
+    # Show partner video in QR code
+    SHOW_PARTNER_VIDEO_IN_QR = True 
+
     # Logging modes (Debug, Info, Error)
     LOGGING_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     APP_LOGGING_LEVEL = logging.INFO
