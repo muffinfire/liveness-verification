@@ -314,10 +314,23 @@ def handle_process_frame(data):
             # Send partner video frame to requester if available
             if code in verification_codes and 'requester_id' in verification_codes[code]:
                 requester_id = verification_codes[code]['requester_id']
-                # Send the partner's video frame to be displayed in the QR code background
+                # Send the partner's video frame and challenge info to be displayed in the QR code background
+                challenge_text = result['challenge_text'] if result['challenge_text'] else "Waiting for challenge..."
+                action_text = "Waiting for action..."
+                word_text = "Waiting for word..."
+                
+                if challenge_text and "and say" in challenge_text.lower():
+                    parts = challenge_text.split("and say")
+                    if len(parts) == 2:
+                        action_text = parts[0].strip()
+                        word_text = "Say " + parts[1].strip()
+                
                 emit('partner_video_frame', {
                     'image': f"data:image/jpeg;base64,{disp_b64}",
-                    'code': code
+                    'code': code,
+                    'action_text': action_text,
+                    'word_text': word_text,
+                    'challenge_text': challenge_text
                 }, room=requester_id)
         else:
             disp_b64 = None

@@ -29,7 +29,22 @@ class ChallengeManager:
         self.last_speech_word = None
 
     def issue_new_challenge(self) -> str:
-        self.current_challenge = random.choice(self.available_challenges)
+        # Generate a random challenge by combining an action and a speech keyword
+        action = random.choice(self.config.ACTIONS)
+        
+        # Get keys from SPEECH_KEYWORDS dictionary
+        speech_keywords = list(self.config.SPEECH_KEYWORDS.keys())
+        
+        # Filter out 'noise' which is not a real keyword for challenges
+        for unwanted in ('noise', 'verify'):
+            if unwanted in speech_keywords:
+                speech_keywords.remove(unwanted)
+        
+        word = random.choice(speech_keywords)
+
+        # Combine action and word to form a challenge
+        self.current_challenge = f"{action} and say {word}"
+        
         self.challenge_start_time = time.time()
         self.challenge_completed = False
         self.verification_result = None
@@ -39,7 +54,6 @@ class ChallengeManager:
 
         if self.speech_recognizer:
             self.speech_recognizer.reset()
-            word = self.current_challenge.lower().split("say ")[-1]
             self.speech_recognizer.set_target_word(word)
 
         if self.blink_detector:
@@ -146,7 +160,7 @@ class ChallengeManager:
             ("turn right" in c and head_pose == "right") or
             ("look up" in c and head_pose == "up") or
             ("look down" in c and head_pose == "down") or
-            ("blink twice" in c and blink_counter >= 3)
+            ("blink twice" in c and blink_counter >= 2)
         )
 
         word = c.split("say ")[-1] if "say " in c else ""
@@ -155,7 +169,7 @@ class ChallengeManager:
         word_in_time_window = False
         if self.last_speech_word == word and self.last_speech_time:
             time_diff = time.time() - self.last_speech_time
-            word_in_time_window = time_diff <= 1.5  # 1.5 second window
+            word_in_time_window = time_diff <= self.config.ACTION_SPEECH_WINDOW
             
         # Word status is true only if the word matches AND is within time window
         word_status = last_speech.lower() == word and word_in_time_window

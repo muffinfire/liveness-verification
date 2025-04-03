@@ -105,7 +105,7 @@ input[type="text"]:focus {
     text-align: center;
 }
 
-#qr-display img {
+#qr-display > img {
     margin-top: 15px;
     max-width: 200px;
     border-radius: 8px;
@@ -531,14 +531,17 @@ input[type="text"]:focus {
     height: 250px;
     margin: 0 auto;
     overflow: hidden;
-    border-radius: 8px;
+    border-radius: 4px;
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    display: flex; /* Enable flexbox for centering */
+    justify-content: center; /* Center horizontally */
+    align-items: center; /* Center vertically */
 }
 
 .qr-video-background {
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: cover; /* Keep this as cover for the background video */
 }
 
 .qr-overlay {
@@ -556,9 +559,27 @@ input[type="text"]:focus {
 }
 
 .qr-overlay img {
-    width: 90%;
-    height: 90%;
+    max-width: 90%; /* Changed to max-width to prevent overflow */
+    max-height: 90%;
     object-fit: contain;
+}
+
+/* Partner video frame styles */
+.partner-video-frame {
+    width: 100%; /* Stretch to fill container width */
+    height: 100%; /* Stretch to fill container height */
+    object-fit: contain; /* Maintain aspect ratio, filling as much as possible */
+    object-position: center; /* Center the video content */
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%); /* Center it perfectly */
+    z-index: 1;
+}
+
+.partner-video-frame.duress {
+    background-color: rgba(255, 165, 0, 0.25); /* Orange tint overlay */
+    border: 3px solid #e67e22;
 }
 
 /* Add partner video label styles */
@@ -575,7 +596,6 @@ input[type="text"]:focus {
     z-index: 10;
 }
 
-/* Waiting for partner message */
 .waiting-for-partner {
     position: absolute;
     top: 50%;
@@ -583,20 +603,10 @@ input[type="text"]:focus {
     right: 0;
     text-align: center;
     transform: translateY(-50%);
-    background-color: rgba(0, 0, 0, 0.6);
+    background-color: rgba(0, 0, 0, 0.5);
     color: white;
     padding: 10px;
     font-size: 14px;
     z-index: 5;
 }
 
-/* Partner video frame styles */
-.partner-video-frame {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    z-index: 1;
-}

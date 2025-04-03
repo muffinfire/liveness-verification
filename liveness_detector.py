@@ -217,6 +217,64 @@ class LivenessDetector:
                 cv2.polylines(debug_frame, [np.array(left_eye)], True, (0, 255, 0), 1)
                 cv2.polylines(debug_frame, [np.array(right_eye)], True, (0, 255, 0), 1)
                 
+                # Draw landmark points for better visualization
+                for i in range(36, 48):  # Eye landmarks (36-41: left eye, 42-47: right eye)
+                    point = (landmarks.part(i).x + x, landmarks.part(i).y + y)
+                    cv2.circle(debug_frame, point, 2, (0, 0, 255), -1)  # Red dots
+                
+                # Draw three key facial landmarks (nose tip and corners of mouth)
+                nose_tip = (landmarks.part(30).x + x, landmarks.part(30).y + y)
+                left_mouth = (landmarks.part(48).x + x, landmarks.part(48).y + y)
+                right_mouth = (landmarks.part(54).x + x, landmarks.part(54).y + y)
+                
+                cv2.circle(debug_frame, nose_tip, 3, (0, 0, 255), -1)  # Blue dot for nose
+                cv2.circle(debug_frame, left_mouth, 3, (0, 0, 255), -1)  # Blue dot for left mouth corner
+                cv2.circle(debug_frame, right_mouth, 3, (0, 0, 255), -1)  # Blue dot for right mouth corner
+
+                # line from nose tip to mouth corners
+                cv2.line(debug_frame, nose_tip, left_mouth, (255, 0, 0), 1)
+                cv2.line(debug_frame, nose_tip, right_mouth, (255, 0, 0), 1)
+
+                # line from nose to eye corners
+                left_eye_corner = (landmarks.part(36).x + x, landmarks.part(36).y + y)
+                right_eye_corner = (landmarks.part(45).x + x, landmarks.part(45).y + y)
+                cv2.line(debug_frame, nose_tip, left_eye_corner, (255, 0, 0), 1)
+                cv2.line(debug_frame, nose_tip, right_eye_corner, (255, 0, 0), 1)
+
+                
+                # Draw directional arrows based on head pose
+                arrow_length = 50
+                arrow_color = (0, 255, 255)  # Yellow
+                arrow_thickness = 2
+                center_x = x + w // 2
+                center_y = y + h // 2
+                
+                # Draw the appropriate arrow based on head pose
+                if self.head_pose == "left":
+                    # Left arrow
+                    cv2.arrowedLine(debug_frame, 
+                                   (center_x, center_y), 
+                                   (center_x - arrow_length, center_y), 
+                                   arrow_color, arrow_thickness)
+                elif self.head_pose == "right":
+                    # Right arrow
+                    cv2.arrowedLine(debug_frame, 
+                                   (center_x, center_y), 
+                                   (center_x + arrow_length, center_y), 
+                                   arrow_color, arrow_thickness)
+                elif self.head_pose == "up":
+                    # Up arrow
+                    cv2.arrowedLine(debug_frame, 
+                                   (center_x, center_y), 
+                                   (center_x, center_y - arrow_length), 
+                                   arrow_color, arrow_thickness)
+                elif self.head_pose == "down":
+                    # Down arrow
+                    cv2.arrowedLine(debug_frame, 
+                                   (center_x, center_y), 
+                                   (center_x, center_y + arrow_length), 
+                                   arrow_color, arrow_thickness)
+                
                 # Calculate Eye Aspect Ratio (EAR) for each eye
                 left_ear = self.blink_detector.calculate_ear(np.array(left_eye) - np.array([x, y]))
                 right_ear = self.blink_detector.calculate_ear(np.array(right_eye) - np.array([x, y]))
@@ -284,14 +342,6 @@ class LivenessDetector:
                 self.logger.debug("Issued new challenge due to none active")  # Log new challenge
         
         # Draw face info on both frames
-        # self.face_detector.draw_face_info(frame, face_rect, self.status, self.liveness_score)
-        '''
-        cv2.putText(frame, f"Speech: {self.last_speech}",
-                    (10, frame.shape[0] - 20),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)  # Display last speech
-        if self.config.SHOW_DEBUG_FRAME and debug_frame is not None:
-            self.face_detector.draw_face_info(debug_frame, face_rect, self.status, self.liveness_score)
-        '''
         
         if debug_frame is not None:
             cv2.putText(debug_frame, f"Challenge: {challenge_text}", (10, 30),

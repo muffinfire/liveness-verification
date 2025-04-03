@@ -103,13 +103,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (qrContainer && qrOverlay) {
                         // Fade out QR code
                         qrOverlay.style.transition = 'opacity 1.5s ease';
-                        qrOverlay.style.opacity = '0.1'; // Almost completely transparent
-                        
-                        // Add a label to indicate partner video is showing
-                        const partnerLabel = document.createElement('div');
-                        partnerLabel.className = 'partner-video-label';
-                        partnerLabel.textContent = 'Partner Video';
-                        qrContainer.appendChild(partnerLabel);
+                        qrOverlay.style.opacity = '0.0'; // Almost completely transparent
                         
                         // Remove the waiting message if it exists
                         const waitingText = qrContainer.querySelector('.waiting-for-partner');
@@ -124,7 +118,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // Handle partner video frames coming from the verification page
         socket.on('partner_video_frame', (data) => {
             if (data.code === currentCode) {
-                // Find the video element for the QR background
                 const videoBackground = document.querySelector('.qr-video-background');
                 const qrContainer = document.querySelector('.video-qr-container');
                 
@@ -133,18 +126,21 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!qrContainer.querySelector('.partner-video-frame')) {
                         const partnerVideoFrame = document.createElement('img');
                         partnerVideoFrame.className = 'partner-video-frame';
+                        // Apply centering and sizing styles
                         partnerVideoFrame.style.position = 'absolute';
-                        partnerVideoFrame.style.top = '0';
-                        partnerVideoFrame.style.left = '0';
-                        partnerVideoFrame.style.width = '100%';
-                        partnerVideoFrame.style.height = '100%';
-                        partnerVideoFrame.style.objectFit = 'contain'; // Changed from 'cover' to 'contain' to center the video
+                        partnerVideoFrame.style.top = '50%'; // Center vertically
+                        partnerVideoFrame.style.left = '50%'; // Center horizontally
+                        partnerVideoFrame.style.transform = 'translate(-50%, -50%)'; // Offset by half its size
+                        partnerVideoFrame.style.width = '100%'; // Fill container width
+                        partnerVideoFrame.style.height = '100%'; // Fill container height
+                        partnerVideoFrame.style.objectFit = 'contain'; // Preserve aspect ratio
+                        partnerVideoFrame.style.objectPosition = 'center'; // Center the content
                         partnerVideoFrame.style.zIndex = '1'; // Between video and overlay
                         
-                        // Center the video in the container
-                        qrContainer.style.display = 'flex';
-                        qrContainer.style.justifyContent = 'center';
-                        qrContainer.style.alignItems = 'center';
+                        // Remove flexbox centering from container (not needed with absolute positioning)
+                        qrContainer.style.display = ''; // Reset to default
+                        qrContainer.style.justifyContent = '';
+                        qrContainer.style.alignItems = '';
                         
                         qrContainer.insertBefore(partnerVideoFrame, qrContainer.querySelector('.qr-overlay'));
                     }
@@ -154,6 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (partnerVideoFrame) {
                         partnerVideoFrame.src = data.image;
                     }
+                    
                 }
             }
         });
@@ -231,7 +228,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         
                         // Gradually reduce opacity to 10-20%
                         setTimeout(() => {
-                            qrOverlay.style.opacity = '0.2'; // Final 20% opacity
+                            qrOverlay.style.opacity = '0.0'; // Final 20% opacity
                         }, 2000); // After 2 seconds
                     }
                 }, 500);
