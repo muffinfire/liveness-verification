@@ -220,7 +220,7 @@ input[type="tel"]:focus {
     font-size: 14px;
 }
 
-/* Video container styles */
+/* Video container styles - MODIFIED */
 .video-container {
     display: flex;
     justify-content: space-between;
@@ -232,6 +232,7 @@ input[type="tel"]:focus {
     justify-content: center;
 }
 
+/* MODIFIED: Added aspect-ratio to maintain 4:3 ratio */
 .video-wrapper {
     position: relative;
     width: 48%;
@@ -239,6 +240,7 @@ input[type="tel"]:focus {
     border-radius: 12px;
     overflow: hidden;
     box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+    aspect-ratio: 4/3;
 }
 
 .single-video .video-wrapper {
@@ -246,10 +248,13 @@ input[type="tel"]:focus {
     max-width: 640px;
 }
 
+/* MODIFIED: Changed height from auto to 100% and object-fit to contain for letterboxing */
 #webcam, #overlay {
     width: 100%;
-    height: auto;
+    height: 100%;
     border-radius: 12px;
+    object-fit: contain;
+    background-color: #000; /* Black background for letterboxing */
 }
 
 #overlay {
@@ -258,16 +263,21 @@ input[type="tel"]:focus {
     left: 0;
 }
 
+/* MODIFIED: Added aspect-ratio to maintain 4:3 ratio */
 #processed-frame-container {
     width: 48%;
+    aspect-ratio: 4/3;
 }
 
+/* MODIFIED: Changed height from auto to 100% and object-fit to contain for letterboxing */
 #processed-frame {
     width: 100%;
-    height: auto;
+    height: 100%;
     border-radius: 12px;
     border: 1px solid #333;
     box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+    object-fit: contain;
+    background-color: #000; /* Black background for letterboxing */
 }
 
 .challenge-container {
@@ -403,6 +413,7 @@ input[type="tel"]:focus {
     display: none;
 }
 
+/* MODIFIED: Mobile styles updated to maintain aspect ratio */
 @media (max-width: 768px) {
     .card-container {
         flex-direction: column;
@@ -411,18 +422,22 @@ input[type="tel"]:focus {
     
     .video-container {
         flex-direction: column;
+        align-items: center;
     }
     
+    /* MODIFIED: Simplified mobile video styles with aspect ratio */
     .video-wrapper, #processed-frame-container {
-        width: 80%; /* Scaled down by 20% */
-        margin: 0 auto; /* Center the video */
-        max-height: 80vh; /* Limit height to 80% of viewport height */
+        width: 100%;
+        margin: 0 auto;
+        aspect-ratio: 4/3;
     }
     
+    /* MODIFIED: Changed to use object-fit: contain for letterboxing */
     #webcam, #debug-frame {
         width: 100%;
-        height: auto;
+        height: 100%;
         object-fit: contain;
+        background-color: #000; /* Black background for letterboxing */
     }
     
     .challenge-text {
@@ -433,7 +448,6 @@ input[type="tel"]:focus {
         font-size: 16px;
     }
     
-    /* Fix the gap on mobile when debug frame is enabled */
     .video-container.double-video {
         align-items: center;
     }
@@ -515,20 +529,22 @@ input[type="tel"]:focus {
     padding: 0;
 }
 
-/* Debug frame styles */
+/* Debug frame styles - MODIFIED */
 #debug-frame {
     width: 100%;
-    height: auto;
+    height: 100%;
     border-radius: 12px;
     border: 1px solid #333;
     box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
     object-fit: contain;
+    background-color: #000; /* Black background for letterboxing */
 }
 
+/* MODIFIED: Added aspect-ratio to maintain 4:3 ratio */
 #processed-frame-container, .video-wrapper {
     width: 48%;
     max-width: 640px;
-    height: auto;
+    aspect-ratio: 4/3;
 }
 
 /* QR code with video background styles */
@@ -616,4 +632,3 @@ input[type="tel"]:focus {
     font-size: 14px;
     z-index: 5;
 }
-
