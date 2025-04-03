@@ -71,15 +71,15 @@ FRAME_CACHE_TTL = 5   # Time to live in seconds (increased from 5)
 
 # JPEG encoding quality for different network conditions - UPDATED: reduced quality values
 JPEG_QUALITY = {
-    'high': 90,    # Reduced from 90
-    'medium': 70,  # Reduced from 80
-    'low': 30,     # Reduced from 70
-    'very_low': 20, # Reduced from 60
-    'ultra_low': 10 # New ultra-low setting
+    'high': 70,
+    'medium': 50,
+    'low': 30,
+    'very_low': 20,
+    'ultra_low': 10
 }
 
 # Default network quality
-DEFAULT_NETWORK_QUALITY = 'ultra_low'
+DEFAULT_NETWORK_QUALITY = 'medium'
 
 # Debug frame quality reduction factor
 DEBUG_QUALITY_REDUCTION = 10  # Reduce debug frame quality by this amount compared to main frame
