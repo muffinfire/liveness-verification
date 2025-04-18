@@ -31,10 +31,10 @@ config = Config()
 
 # Configure logging
 logging.basicConfig(level=config.APP_LOGGING_LEVEL, format=config.LOGGING_FORMAT)
-logging.getLogger('speech_recognizer').setLevel(config.SPEECH_RECOGNIZER_LOGGING_LEVEL)
-logging.getLogger('action_detector').setLevel(config.ACTION_DETECTOR_LOGGING_LEVEL)
-logging.getLogger('challenge_manager').setLevel(config.CHALLENGE_MANAGER_LOGGING_LEVEL)
-logging.getLogger('liveness_detector').setLevel(config.LIVENESS_DETECTOR_LOGGING_LEVEL)
+logging.getLogger('lib.speech_recognizer').setLevel(config.SPEECH_RECOGNIZER_LOGGING_LEVEL)
+logging.getLogger('lib.action_detector').setLevel(config.ACTION_DETECTOR_LOGGING_LEVEL)
+logging.getLogger('lib.challenge_manager').setLevel(config.CHALLENGE_MANAGER_LOGGING_LEVEL)
+logging.getLogger('lib.liveness_detector').setLevel(config.LIVENESS_DETECTOR_LOGGING_LEVEL)
 logger = logging.getLogger(__name__)
 
 # Initialize active sessions
