@@ -39,12 +39,12 @@ class Config:
     LANDMARK_HISTORY_MAX = 30  # Maximum frames to keep in landmark history
     
     # Blink detection parameters
-    BLINK_THRESHOLD = 0.25  # EAR threshold for blink detection
+    BLINK_THRESHOLD = 0.23  # EAR threshold for blink detection
     MIN_BLINK_FRAMES = 1    # Minimum consecutive frames below threshold to count as blink
     MIN_BLINK_INTERVAL = 0.1  # Minimum time between blinks (seconds)
     
     # Challenge parameters
-    CHALLENGE_TIMEOUT = 10  # seconds
+    CHALLENGE_TIMEOUT = 15  # seconds
     ACTION_SPEECH_WINDOW = 1.5  # Time allowed between action and speech (seconds)
     SPEECH_DEBOUNCE_TIME = 0.2  # Ignore repeat detections of same word within this time
     

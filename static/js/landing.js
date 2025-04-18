@@ -103,7 +103,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (qrContainer && qrOverlay) {
                         // Fade out QR code
                         qrOverlay.style.transition = 'opacity 1.5s ease';
-                        qrOverlay.style.opacity = '0.1'; // Almost completely transparent
+                        qrOverlay.style.opacity = '0';
                         
                         // Add a label to indicate partner video is showing
                         const partnerLabel = document.createElement('div');
@@ -133,13 +133,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!qrContainer.querySelector('.partner-video-frame')) {
                         const partnerVideoFrame = document.createElement('img');
                         partnerVideoFrame.className = 'partner-video-frame';
-                        partnerVideoFrame.style.position = 'absolute';
-                        partnerVideoFrame.style.top = '0';
-                        partnerVideoFrame.style.left = '0';
-                        partnerVideoFrame.style.width = '100%';
-                        partnerVideoFrame.style.height = '100%';
-                        partnerVideoFrame.style.objectFit = 'contain'; // Changed from 'cover' to 'contain' to center the video
-                        partnerVideoFrame.style.zIndex = '1'; // Between video and overlay
                         
                         // Center the video in the container
                         qrContainer.style.display = 'flex';

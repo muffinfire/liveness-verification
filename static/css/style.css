@@ -531,7 +531,7 @@ input[type="text"]:focus {
     height: 250px;
     margin: 0 auto;
     overflow: hidden;
-    border-radius: 8px;
+    border-radius: 5px;
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
 }
 
@@ -556,15 +556,15 @@ input[type="text"]:focus {
 }
 
 .qr-overlay img {
-    width: 90%;
-    height: 90%;
+    width: 80%;
+    height: 80%;
     object-fit: contain;
 }
 
 /* Add partner video label styles */
 .partner-video-label {
     position: absolute;
-    top: 10px;
+    top: 20px;
     left: 0;
     right: 0;
     text-align: center;
@@ -578,14 +578,14 @@ input[type="text"]:focus {
 /* Waiting for partner message */
 .waiting-for-partner {
     position: absolute;
-    top: 50%;
+    top: 10%;
     left: 0;
     right: 0;
     text-align: center;
     transform: translateY(-50%);
     background-color: rgba(0, 0, 0, 0.6);
     color: white;
-    padding: 10px;
+    padding: 5px;
     font-size: 14px;
     z-index: 5;
 }
@@ -593,10 +593,11 @@ input[type="text"]:focus {
 /* Partner video frame styles */
 .partner-video-frame {
     position: absolute;
-    top: 0;
-    left: 0;
+    top: 50%;
+    left: 50%;
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    transform: translate(-50%, -50%);
+    object-fit: contain;
     z-index: 1;
 }

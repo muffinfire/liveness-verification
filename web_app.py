@@ -405,6 +405,4 @@ if __name__ == '__main__':
         host=config.HOST,
         port=config.PORT,
         debug=config.BROWSER_DEBUG,
-        certfile=config.CERTFILE,
-        keyfile=config.KEYFILE
     )
