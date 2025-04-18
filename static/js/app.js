@@ -36,7 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // video.muted = true;
     // video.volume = 0;
 
-    // Initialize the Socket.IO connection and set up event listeners
+    // Initialise the Socket.IO connection and set up event listeners
     function initSocket() {
         console.log('Initializing socket connection for verification');
         socket = io(); // Create a new Socket.IO connection to the server
@@ -186,7 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (data.verification_result === 'PASS' || data.duress_detected || verificationAttempts >= MAX_VERIFICATION_ATTEMPTS) {
                     setTimeout(() => window.location.href = '/', 3000); // Redirect to home after 3 seconds
                 } else {
-                    // Use a longer delay (3 seconds) to account for the transition animation
+                    // Use a delay to account for the transition animation
                     setTimeout(() => {
                         isProcessing = true; // Resume processing
                         canvas.style.display = 'none'; // Hide the canvas
@@ -199,8 +199,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         // Add additional delay before starting the next challenge to compensate for animation time
                         setTimeout(() => {
                             requestAnimationFrame(captureAndSendFrame); // Start capturing frames again
-                        }, 2000); // Additional 2 second delay before starting next challenge
-                    }, 1000); // Initial 1 second delay
+                        }, 100); // delay before starting next challenge
+                    }, 2000); // Initial delay
                 }
             } else if (isProcessing) {
                 requestAnimationFrame(captureAndSendFrame); // Continue capturing if still processing
@@ -226,7 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         challengeText.textContent = 'Waiting for new challenge...';
                         isProcessing = true;
                         requestAnimationFrame(captureAndSendFrame); // Resume frame capture
-                    }, 2000); // Wait 2 seconds before resuming
+                    }, 100); // Wait before resuming
                 }
             }
         });
@@ -243,7 +243,7 @@ document.addEventListener('DOMContentLoaded', () => {
             resultText.textContent = 'Maximum verification attempts reached.';
             resultContainer.classList.remove('hidden');
             applyVideoEffect('failure');
-            setTimeout(() => window.location.href = '/', 5000); // Redirect after 5 seconds
+            setTimeout(() => window.location.href = '/', 3000); // Redirect after 5 seconds
         });
         
         // Handle disconnection from the server
@@ -329,13 +329,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 // --- Start Audio Processing ---
                 if (stream.getAudioTracks().length > 0) {
                     audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                    // Ensure the sample rate matches your PocketSphinx config (e.g., 16000)
-                    if (audioContext.sampleRate !== 16000) { 
-                        console.warn(`AudioContext sample rate (${audioContext.sampleRate}) doesn't match target (16000). Resampling might be needed or PocketSphinx config adjusted.`);
-                        // Note: Simple resampling isn't trivial in JS. 
-                        // Best practice is often to ensure capture matches target if possible, 
-                        // or handle resampling server-side if necessary.
-                        // For now, we'll proceed, but be aware of potential issues.
+                    // Warn if rate does not match PocketSphinx config 48000
+                    if (audioContext.sampleRate !== 48000) { 
+                        console.warn('AudioContext sample rate (${audioContext.sampleRate}) doesn\'t match target (48000).');
                     }
                     
                     // log the audio sample rate

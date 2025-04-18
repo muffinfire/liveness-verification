@@ -8,8 +8,7 @@ import dlib
 from typing import Tuple, Optional
 from collections import deque
 
-from config import Config
-from lib.utils.frame_utils import save_frame
+from lib.config import Config
 
 class BlinkDetector:
     """Handles eye detection and blink analysis using facial landmarks."""
@@ -17,8 +16,7 @@ class BlinkDetector:
     def __init__(self, config: Config):
         self.config = config
         self.logger = logging.getLogger(__name__)
-        self.frame_count = 0
-
+        
         # Load eye detectors (as fallback if no dlib)
         self.eye_detector = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
         if self.eye_detector.empty():
@@ -63,14 +61,9 @@ class BlinkDetector:
     def detect_blinks_dlib(self, frame: np.ndarray,
                            face_rect: Tuple[int,int,int,int]) -> bool:
         """Detect blinks using dlib EAR. Draw lines on `frame` for debug."""
+        if face_rect is None:
+            return False
         
-        frame_interval = self.config.SAVE_FRAMES_INTERVAL
-
-        self.frame_count += 1
-
-        if self.config.SAVE_FRAMES and self.frame_count % frame_interval == 0:
-            save_frame(frame, out_dir=self.config.SAVE_FRAMES_DIR, prefix="blink_debug_DLIB_IN", logger=self.logger, frame_count=self.frame_count)
-
         x, y, w, h = face_rect
         rect = dlib.rectangle(x, y, x + w, y + h)
         
@@ -94,7 +87,7 @@ class BlinkDetector:
                     pt2 = tuple(eye[(i+1) % 6])
                     cv2.line(frame, pt1, pt2, (0,255,0), 1)
         
-        # Rate-limit debug logs
+        # [CHANGED] Rate-limit debug logs
         if now - self.last_debug_time > 1.0:
             self.logger.debug(f"EAR: {avg_ear:.2f} (Threshold: {self.blink_threshold:.2f})")
         
@@ -117,9 +110,9 @@ class BlinkDetector:
                 self.blink_detected = True
                 blink_detected_now = True
                 
-                # Rate-limit "BLINK DETECTED" info
+                # [CHANGED] Rate-limit "BLINK DETECTED" info
                 if now - self.last_debug_time > 1.0:
-                    self.logger.debug(f"BLINK DETECTED! Counter: {self.blink_counter}")
+                    self.logger.info(f"BLINK DETECTED! Counter: {self.blink_counter}")
                 
                 self.last_blink_time = now
             
@@ -138,23 +131,12 @@ class BlinkDetector:
         if now - self.last_debug_time > 1.0:
             self.last_debug_time = now
         
-        # Save debug frame
-        if self.config.SAVE_FRAMES and self.frame_count % frame_interval == 0:
-            save_frame(frame, out_dir=self.config.SAVE_FRAMES_DIR, prefix="blink_debug_DLIB_OUT", logger=self.logger, frame_count=self.frame_count)
-        
         return blink_detected_now
     
     def detect_blinks_haar(self, face_roi: np.ndarray,
                            frame: np.ndarray,
                            face_rect: Tuple[int,int,int,int]) -> bool:
         """Fallback blink detection with Haar. Extremely simplistic."""
-
-        frame_interval = self.config.SAVE_FRAMES_INTERVAL
-
-        self.frame_count += 1
-        if self.config.SAVE_FRAMES and self.frame_count % frame_interval == 0:
-            save_frame(frame, out_dir=self.config.SAVE_FRAMES_DIR, prefix="blink_debug_HAAR_IN", logger=self.logger, frame_count=self.frame_count)
-
         if face_roi.shape[0]<20 or face_roi.shape[1]<20:
             return False
         
@@ -189,13 +171,6 @@ class BlinkDetector:
         
         if now - self.last_debug_time > 1.0:
             self.last_debug_time = now
-        
-        self.logger.info(f"Save frames enabled: {self.config.SAVE_FRAMES}, interval: {frame_interval}")
-
-        # Save debug frame
-        if self.config.SAVE_FRAMES and self.frame_count % frame_interval == 0:
-            save_frame(frame, out_dir=self.config.SAVE_FRAMES_DIR, prefix="blink_debug_HAAR_OUT", logger=self.logger, frame_count=self.frame_count)
-
         
         return blink_detected_now
     

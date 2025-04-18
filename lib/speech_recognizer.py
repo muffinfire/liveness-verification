@@ -4,7 +4,7 @@ import threading
 import time
 import logging
 import tempfile
-from config import Config
+from lib.config import Config
 from pocketsphinx import Decoder
 import os
 
@@ -54,7 +54,7 @@ class SpeechRecognizer:
             config_ps.set_float('-samprate', config.SPEECH_SAMPLING_RATE)
 
             # Suppress PocketSphinx logs (optional)
-            config_ps.set_string('-logfn', 'logs/speech_recognizer.log')
+            config_ps.set_string('-logfn', 'speech_recognizer.log')
 
             # Initialize the decoder
             self.decoder = Decoder(config_ps)

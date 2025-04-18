@@ -14,8 +14,8 @@ import threading
 import time
 from typing import Dict, Any
 
-from config import Config
-from liveness_detector import LivenessDetector
+from lib.config import Config
+from lib.liveness_detector import LivenessDetector
 
 # Initialize Flask app
 app = Flask(__name__,
