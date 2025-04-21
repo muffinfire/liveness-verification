@@ -1,5 +1,7 @@
 # web_app.py
 # Web application for liveness detection.
+import eventlet
+eventlet.monkey_patch()
 
 import os
 import cv2
@@ -475,8 +477,9 @@ if __name__ == '__main__':
 
     # Run app
     socketio.run(
-        app,
-        host=config.HOST,
-        port=config.PORT,
-        debug=config.BROWSER_DEBUG,
-    )
+        app, 
+        host=config.HOST, 
+        port=config.PORT, 
+        debug=config.BROWSER_DEBUG, 
+        use_reloader=False)
+
