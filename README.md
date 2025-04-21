@@ -30,7 +30,7 @@ Built with Flask, Flask-SocketIO, OpenCV, Dlib, and PocketSphinx. Designed for c
 
 ### Option 1: Run with `docker`
 
-This runs the container in detached mode, accessible at http://(your-ip):8001.
+This runs the container in detached mode, accessible at `http://<your-server-ip>:8001`.
 
 #### Step 1: Pull the latest version
 
@@ -70,8 +70,8 @@ docker compose up -d
 ### Step 1: Clone the Repo
 
 ```bash
-git clone https://github.com/muffinfire/facedetection.git
-cd facedetection
+git clone https://github.com/muffinfire/liveness-verification.git
+cd liveness-verification
 ```
 
 ### Step 2: Build & Run the App
