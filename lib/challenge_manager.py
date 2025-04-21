@@ -111,9 +111,6 @@ class ChallengeManager:
         elif "look down" in c and head_pose == "down":
             action_is_happening = True
             self.logger.debug("DOWN action is happening")
-        elif "blink twice" in c and blink_counter >= self.config.BLINK_COUNTER_THRESHOLD:
-            action_is_happening = True
-            self.logger.debug(f"BLINK action is happening (Counter: {blink_counter})")
 
         word_is_happening = False
 
@@ -183,8 +180,7 @@ class ChallengeManager:
             ("turn left" in c and head_pose == "left") or
             ("turn right" in c and head_pose == "right") or
             ("look up" in c and head_pose == "up") or
-            ("look down" in c and head_pose == "down") or
-            ("blink twice" in c and blink_counter >= self.config.BLINK_COUNTER_THRESHOLD)
+            ("look down" in c and head_pose == "down")
         )
 
         word = c.split("say ")[-1] if "say " in c else "" # Extract target word from challenge

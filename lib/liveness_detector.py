@@ -158,8 +158,6 @@ class LivenessDetector:
                         action_text = "Look Up"
                     elif "look down" in challenge_text.lower():
                         action_text = "Look Down"
-                    elif "blink twice" in challenge_text.lower():
-                        action_text = "Blink Twice"
                     
                     # Extract word to say
                     if "say " in challenge_text.lower():

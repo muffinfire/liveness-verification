@@ -37,10 +37,10 @@ class Config:
     MIN_BLINK_INTERVAL = 0.05               # Minimum time between blinks (seconds)
     
     # Challenge parameters
-    CHALLENGE_TIMEOUT = 120                  # Time allowed for a challenge to be completed (seconds)
+    CHALLENGE_TIMEOUT = 30                  # Time allowed for a challenge to be completed (seconds)
     ACTION_SPEECH_WINDOW = 3                # Time allowed between action and speech (seconds)
     SPEECH_DEBOUNCE_TIME = 0.1              # Ignore repeat detections of same word within this time (seconds)
-    BLINK_COUNTER_THRESHOLD = 2             # Minimum number of blinks to count as a challenge completion
+    BLINK_COUNTER_THRESHOLD = 3             # Minimum number of blinks to count as a challenge completion
     
     # Speech recognition parameters
     SPEECH_TIMEOUT = 10                     # Time allowed for speech to be recognised (seconds)
@@ -59,13 +59,12 @@ class Config:
         "noise": 1e-1,
     }
 
-    # Available actions (Eg: "turn left", "turn right", "look up", "look down", "blink twice")
+    # Available actions (Eg: "turn left", "turn right", "look up", "look down")
     ACTIONS= [
         "turn left", 
         "turn right", 
         "look up", 
-        "look down", 
-        "blink twice"
+        "look down"
     ]
 
     # SSL and host/port in config
