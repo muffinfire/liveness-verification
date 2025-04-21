@@ -28,6 +28,37 @@ Built with Flask, Flask-SocketIO, OpenCV, Dlib, and PocketSphinx. Designed for c
 
 ## Quick Install (With Docker)
 
+### Option 1: Run with `docker`
+
+This runs the container in detached mode, accessible at http://<your-ip>:8001.
+
+```bash
+docker run -d \
+  --name liveness-verification \
+  -p 8001:8080 \
+  muffinfire/liveness-verification:latest
+```
+### Option 2: Use Docker Compose
+
+Create a `docker-compose.yml` file:
+
+```yml
+services:
+  liveness-verification:
+    image: muffinfire/liveness-verification:latest
+    ports:
+      - "8001:8080"
+    environment:
+      - PORT=8080
+```
+
+Then run:
+```bash
+docker compose up -d
+```
+
+## Manual Docker Install (With Script)
+
 ### Step 1: Clone the Repo
 
 ```bash
