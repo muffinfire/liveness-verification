@@ -56,7 +56,7 @@ class SpeechRecognizer:
             config_ps.set_float('-samprate', config.SPEECH_SAMPLING_RATE) # Set the sample rate (Default is 16000 but 48000 is default in Chrome)
 
             # Suppress PocketSphinx logs
-            config_ps.set_string('-logfn', 'logs/speech_recognizer.log')
+            config_ps.set_string('-logfn', os.devnull)
 
             # Initialise the decoder
             self.decoder = Decoder(config_ps) # Initialise the decoder with the configuration
