@@ -6,20 +6,16 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
     pkg-config \
-    libx11-dev \
-    libgtk-3-dev \
     libatlas-base-dev \
     libjpeg-dev \
     libpng-dev \
     libavformat-dev \
     libavcodec-dev \
-    libavdevice-dev \
     libavfilter-dev \
     libswscale-dev \
     libv4l-dev \
     libopenblas-dev \
     liblapack-dev \
-    libpq-dev \
     portaudio19-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 

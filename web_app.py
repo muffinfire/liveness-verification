@@ -22,7 +22,7 @@ from lib.liveness_detector import LivenessDetector
 app = Flask(__name__,
             static_folder='static',
             template_folder='templates')
-app.config['SECRET_KEY'] = 'liveness-detection-secret'
+app.config['SECRET_KEY'] = 'ajs871kn&43jn*03m1nj&!09nd8'
 
 # Initialise socketio
 socketio = SocketIO(app, cors_allowed_origins="*")

@@ -1,10 +1,12 @@
 services:
-  facedetection:
+  liveness-verification:
     build: .
-    container_name: facedetection
+    container_name: liveness-verification
     ports:
       - "8001:8080"  # external:internal, so you can reach it at http://serverip:8001
     environment:
-      # if you want to override config port, do: PORT=8001, etc.
+      # Set port to 8080 this is the internal port for the app as defined in the Dockerfile and config.py
       - PORT=8080
+      # Set secret key for the app
+      - SECRET_KEY=ajs871kn&43jn*03m1nj&!09nd8
     restart: unless-stopped
