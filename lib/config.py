@@ -39,12 +39,9 @@ class Config:
     # Challenge parameters
     CHALLENGE_TIMEOUT = 30                  # Time allowed for a challenge to be completed (seconds)
     ACTION_SPEECH_WINDOW = 3                # Time allowed between action and speech (seconds)
-    SPEECH_DEBOUNCE_TIME = 0.1              # Ignore repeat detections of same word within this time (seconds)
     BLINK_COUNTER_THRESHOLD = 3             # Minimum number of blinks to count as a challenge completion
     
     # Speech recognition parameters
-    SPEECH_TIMEOUT = 10                     # Time allowed for speech to be recognised (seconds)
-    SPEECH_PHRASE_LIMIT = 2                 # Maximum number of words in a phrase (Used to limit false positives)
     SPEECH_SAMPLING_RATE = 48000            # Sampling rate for speech recognition
     # SPEECH_BUFFER_SIZE = 1024             # Buffer setting moved to app.js
 
