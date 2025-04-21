@@ -8,8 +8,13 @@
         "imdecode",
         "imencode",
         "IMREAD",
+        "initialisation",
+        "Initialise",
+        "initialised",
+        "Initialising",
         "jsonify",
         "levelname",
-        "nparr"
+        "nparr",
+        "recognised"
     ]
 }

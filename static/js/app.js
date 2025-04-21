@@ -1,36 +1,36 @@
 // Wait for the HTML document to fully load before running the script
 document.addEventListener('DOMContentLoaded', () => {
     // Get references to DOM elements used in the application
-    const video = document.getElementById('webcam'); // The live webcam feed element
-    const canvas = document.getElementById('overlay'); // Canvas for overlaying text or effects
-    const ctx = canvas.getContext('2d'); // 2D drawing context for the canvas
-    const debugFrame = document.getElementById('debug-frame'); // Element to display processed debug frames
-    const challengeText = document.getElementById('challenge-text'); // Displays the current challenge (e.g., "Turn left")
-    const actionStatus = document.getElementById('action-status'); // Shows if the action part of the challenge is complete
-    const wordStatus = document.getElementById('word-status'); // Shows if the spoken word part is complete
-    const timeRemaining = document.getElementById('time-remaining'); // Displays remaining time for the challenge
-    const resultContainer = document.getElementById('result-container'); // Container for showing verification results
-    const resultText = document.getElementById('result-text'); // Text element for result messages
-    const resetButton = document.getElementById('reset-button'); // Button to manually reset the verification
-    const videoContainer = document.querySelector('.video-container'); // Container for video and debug frame
-    const processedFrameContainer = document.getElementById('processed-frame-container'); // Container for debug frame
-    const sessionCode = document.getElementById('session-code').textContent; // Verification code from the HTML
+    const video = document.getElementById('webcam');                                        // The live webcam feed element
+    const canvas = document.getElementById('overlay');                                      // Canvas for overlaying text or effects
+    const ctx = canvas.getContext('2d');                                                    // 2D drawing context for the canvas
+    const debugFrame = document.getElementById('debug-frame');                              // Element to display processed debug frames
+    const challengeText = document.getElementById('challenge-text');                        // Displays the current challenge (e.g., "Turn left")
+    const actionStatus = document.getElementById('action-status');                          // Shows if the action part of the challenge is complete
+    const wordStatus = document.getElementById('word-status');                              // Shows if the spoken word part is complete
+    const timeRemaining = document.getElementById('time-remaining');                        // Displays remaining time for the challenge
+    const resultContainer = document.getElementById('result-container');                    // Container for showing verification results
+    const resultText = document.getElementById('result-text');                              // Text element for result messages
+    const resetButton = document.getElementById('reset-button');                            // Button to manually reset the verification
+    const videoContainer = document.querySelector('.video-container');                      // Container for video and debug frame
+    const processedFrameContainer = document.getElementById('processed-frame-container');   // Container for debug frame
+    const sessionCode = document.getElementById('session-code').textContent;                // Verification code from the HTML
     
     // Declare variables used throughout the script
-    let socket; // Socket.IO connection to the server
-    let isProcessing = false; // Flag to control frame capturing and sending
-    let stream = null; // Webcam media stream
-    let verificationAttempts = 0; // Counter for verification attempts
-    const MAX_VERIFICATION_ATTEMPTS = 3; // Maximum allowed attempts before failing
-    let isDebugMode = false; // Whether debug logging is enabled (set by server)
-    let showDebugFrame = false; // Whether to show the debug frame (set by server)
-    let frameCount = 0; // Counter for frames sent to the server
+    let socket;                             // Socket.IO connection to the server
+    let isProcessing = false;               // Flag to control frame capturing and sending
+    let stream = null;                      // Webcam media stream
+    let verificationAttempts = 0;           // Counter for verification attempts
+    const MAX_VERIFICATION_ATTEMPTS = 3;    // Maximum allowed attempts before failing
+    let isDebugMode = false;                // Whether debug logging is enabled (set by server)
+    let showDebugFrame = false;             // Whether to show the debug frame (set by server)
+    let frameCount = 0;                     // Counter for frames sent to the server
     
     // Audio processing variables
-    let audioContext = null; 
-    let scriptProcessor = null; 
-    let audioSource = null;
-    const bufferSize = 4096;
+    let audioContext = null;                 // Audio context for processing audio
+    let scriptProcessor = null;              // Script processor for audio processing
+    let audioSource = null;                  // Audio source for processing audio
+    const bufferSize = 4096;                 // Buffer size for audio processing
     
     // Mute the video to avoid audio feedback
     // video.muted = true;
@@ -38,7 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initialise the Socket.IO connection and set up event listeners
     function initSocket() {
-        console.log('Initializing socket connection for verification');
+        console.log('Initialising socket connection for verification');
         socket = io(); // Create a new Socket.IO connection to the server
         
         // When the socket connects to the server
@@ -84,14 +84,14 @@ document.addEventListener('DOMContentLoaded', () => {
             // Log frame data every 30 frames if in debug mode
             if (isDebugMode && frameCount % 30 === 0) {
                 console.log('Received processed_frame:', {
-                    hasImage: !!data.image, // Whether a regular image was received
-                    hasDebugImage: !!data.debug_image, // Whether a debug image was received
-                    challenge: data.challenge, // Current challenge text
-                    action: data.action_completed, // Action completion status
-                    word: data.word_completed, // Word completion status
-                    time: data.time_remaining, // Remaining time for the challenge
-                    result: data.verification_result, // Verification result (PASS, FAIL, PENDING)
-                    duress: data.duress_detected // Whether duress was detected
+                    hasImage: !!data.image,             // Whether a regular image was received
+                    hasDebugImage: !!data.debug_image,  // Whether a debug image was received
+                    challenge: data.challenge,          // Current challenge text
+                    action: data.action_completed,      // Action completion status
+                    word: data.word_completed,          // Word completion status
+                    time: data.time_remaining,          // Remaining time for the challenge
+                    result: data.verification_result,   // Verification result (PASS, FAIL, PENDING)
+                    duress: data.duress_detected        // Whether duress was detected
                 });
             }
             
@@ -290,7 +290,7 @@ document.addEventListener('DOMContentLoaded', () => {
             offscreenCanvas.height = video.videoHeight;
             const offscreenCtx = offscreenCanvas.getContext('2d');
             offscreenCtx.drawImage(video, 0, 0, offscreenCanvas.width, offscreenCanvas.height); // Draw video frame
-            const imageData = offscreenCanvas.toDataURL('image/jpeg', 0.1); // Convert to JPEG with 80% quality
+            const imageData = offscreenCanvas.toDataURL('image/jpeg', 0.2); // Convert to JPEG with 20% quality
             
             // Log frame sending every 30 frames in debug mode
             if (isDebugMode && frameCount % 30 === 0) {
@@ -308,7 +308,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // Initialize the webcam and start the video feed
+    // Initialise the webcam and start the video feed
     async function initWebcam() {
         try {
             // Request access to the user's webcam and microphone
@@ -401,15 +401,15 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Add click event listener to the reset button
     resetButton.addEventListener('click', () => {
-        if (socket && socket.connected) { // Check if socket is connected
-            socket.emit('reset', { code: sessionCode }); // Request a reset from the server
-            isProcessing = true; // Resume processing
-            removeVideoEffect(); // Clear any visual effects
-            requestAnimationFrame(captureAndSendFrame); // Start capturing frames again
+        if (socket && socket.connected) {                   // Check if socket is connected
+            socket.emit('reset', { code: sessionCode });    // Request a reset from the server
+            isProcessing = true;                            // Resume processing
+            removeVideoEffect();                            // Clear any visual effects
+            requestAnimationFrame(captureAndSendFrame);     // Start capturing frames again
         }
     });
     
-    // Initialize the application
+    // Initialise the application
     function init() {
         initSocket(); // Set up the socket connection
         initWebcam(); // Start the webcam
@@ -425,5 +425,5 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
-    init(); // Run the initialization function
+    init(); // Run the initialisation function
 });

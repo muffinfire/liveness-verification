@@ -1,4 +1,5 @@
-"""Main liveness detection module integrating all components."""
+# liveness_detector.py
+# This file is used to detect liveness in a video stream
 
 import cv2
 import numpy as np
@@ -14,19 +15,18 @@ from lib.speech_recognizer import SpeechRecognizer
 from lib.challenge_manager import ChallengeManager
 from lib.action_detector import ActionDetector
 
+# LivenessDetector class for detecting liveness in a video stream
 class LivenessDetector:
-    """Main class for liveness detection integrating all components."""
-    
+    # Initialise the liveness detector with configuration
     def __init__(self, config: Config):
-        """Initialize the liveness detector with configuration."""
         self.config = config  # Store the configuration object for settings access
         self.logger = logging.getLogger(__name__)  # Create logger instance for this module
 
-        # Initialize component detectors with the provided config
-        self.face_detector = FaceDetector(config)  # Detects faces in frames
-        self.blink_detector = BlinkDetector(config)  # Tracks eye blinks
-        self.action_detector = ActionDetector(config)  # Detects head movements
-        self.speech_recognizer = SpeechRecognizer(config)  # Recognizes spoken words
+        # Initialise component detectors with the provided config
+        self.face_detector = FaceDetector(config)           # Detects faces in frames
+        self.blink_detector = BlinkDetector(config)         # Tracks eye blinks
+        self.action_detector = ActionDetector(config)       # Detects head movements
+        self.speech_recognizer = SpeechRecognizer(config)   # Recognizes spoken words
         
         # Set up challenge manager with dependencies for liveness tasks
         self.challenge_manager = ChallengeManager(
@@ -35,78 +35,40 @@ class LivenessDetector:
             blink_detector=self.blink_detector
         )
         
-        # Initialize counters and state variables
-        self.consecutive_live_frames = 0  # Tracks consecutive frames indicating liveness
-        self.consecutive_fake_frames = 0  # Tracks consecutive frames indicating no liveness
-        self.status = "Waiting for verification..."  # Current status message
-        self.liveness_score = 0.0  # Score indicating liveness confidence
-        self.duress_detected = False  # Flag for detecting forced verification attempts
+        # Initialise counters and state variables
+        self.consecutive_live_frames = 0                # Tracks consecutive frames indicating liveness
+        self.consecutive_fake_frames = 0                # Tracks consecutive frames indicating no liveness
+        self.status = "Waiting for verification..."     # Current status message
+        self.liveness_score = 0.0                       # Score indicating liveness confidence
+        self.duress_detected = False                    # Flag for detecting forced verification attempts
         
-        # Initialize detection state for consistent challenge updates
-        self.head_pose = "center"  # Default head pose for initial state
-        self.blink_count = 0  # Default blink count for initial state
-        self.last_speech = ""  # Default last spoken word for initial state
+        # Initialise detection state for consistent challenge updates
+        self.head_pose = "center"       # Default head pose for initial state
+        self.blink_count = 0            # Default blink count for initial state
+        self.last_speech = ""           # Default last spoken word for initial state
         
-        self.logger.info("LivenessDetector initialized")  # Log initialization completion
+        self.logger.info("LivenessDetector initialised")
         
         # Begin the first liveness challenge
         self.start_challenge()  
     
-    def detect_liveness(self, frame: np.ndarray) -> Tuple[np.ndarray, bool]:   
-        # Detect face and its region of interest (ROI)
-        face_roi, face_rect = self.face_detector.detect_face(frame)
-        
-        # Handle case where no face is detected
-        if face_roi is None:
-            return frame, False  # Return frame and indicate no exit
-        
-        # Analyze face movement and head pose
-        self.face_detector.detect_movement(face_rect)
-        head_pose = self.action_detector.detect_head_pose(frame, face_rect) or "center"  # Fallback to "center" if None
-        self.blink_detector.detect_blinks(frame, face_rect, face_roi)  # Check for blinks
-        last_speech = self.speech_recognizer.get_last_speech()  # Get latest spoken word
-        
-        # Update challenge status with detected features
-        self.challenge_manager.update(head_pose, self.blink_detector.blink_counter, last_speech)
-        
-        # Retrieve current challenge details with detection state
-        challenge_text, action_completed, word_completed, verification_result = \
-            self.challenge_manager.get_challenge_status(head_pose, self.blink_detector.blink_counter, last_speech)
-        
-        # Process active challenge
-        if challenge_text is not None:
-            self.challenge_manager.verify_challenge(
-                head_pose, self.blink_detector.blink_counter, last_speech
-            )  # Verify if challenge conditions are met
-            
-            # Handle verification outcomes
-            if verification_result == "PASS":
-                return frame, True  # Exit with success
-            elif verification_result == "FAIL":
-                return frame, True  # Exit with failure
-        else:
-            self.start_challenge()  # Start a new challenge if none is active
-        
-        return frame, False  # Return frame and indicate processing continues
-
+    # Reset all components to initial state
     def reset(self) -> None:
-        """Reset all components to initial state."""
-        self.blink_detector.reset()  # Clear blink detection state
-        self.speech_recognizer.reset()  # Clear speech recognition state
-        self.challenge_manager.reset()  # Clear challenge state
-        self.consecutive_live_frames = 0  # Reset live frame counter
-        self.consecutive_fake_frames = 0  # Reset fake frame counter
-        self.status = "Waiting for verification..."  # Reset status message
-        self.liveness_score = 0.0  # Reset liveness score
-        self.duress_detected = False  # Reset duress flag
-        self.head_pose = "center"  # Reset head pose to default
-        self.blink_count = 0  # Reset blink count to default
-        self.last_speech = ""  # Reset last speech to default
-        self.start_challenge()  # Begin a new challenge
-        self.logger.debug("LivenessDetector reset")  # Log reset action
+        self.blink_detector.reset()                     # Clear blink detection state
+        self.speech_recognizer.reset()                  # Clear speech recognition state
+        self.challenge_manager.reset()                  # Clear challenge state
+        self.consecutive_live_frames = 0                # Reset live frame counter
+        self.consecutive_fake_frames = 0                # Reset fake frame counter
+        self.status = "Waiting for verification..."     # Reset status message
+        self.duress_detected = False                    # Reset duress flag
+        self.head_pose = "center"                       # Reset head pose to default
+        self.blink_count = 0                            # Reset blink count to default
+        self.last_speech = ""                           # Reset last speech to default
+        self.start_challenge()                          # Begin a new challenge
+        self.logger.debug("LivenessDetector reset")     # Log reset action
 
+    # Start a new challenge
     def start_challenge(self):
-        """Start a new challenge."""
         self.challenge_manager.issue_new_challenge()  # Generate a new challenge
 
         # Pass current state to get_challenge_status to avoid missing argument errors
@@ -119,22 +81,23 @@ class LivenessDetector:
         else:
             self.logger.error("Failed to start new challenge")  # Log error
     
+    # Process a frame for liveness detection
     def process_frame(self, frame):
-        """Process a frame for liveness detection (newer approach)."""
         self.logger.debug("Processing frame in LivenessDetector")  # Log frame processing start
+        
         # Handle invalid frame input
         if frame is None or frame.size == 0:
             self.logger.error("Frame is None or empty in process_frame")  # Log error
             return {
-                'frame': None,  # No display frame available
-                'debug_frame': None,  # No debug frame available
-                'verification_result': 'PENDING',  # Default result
-                'exit_flag': False,  # Continue processing
-                'challenge_text': None,  # No challenge text
-                'action_completed': False,  # Action not completed
-                'word_completed': False,  # Word not spoken
-                'time_remaining': 0,  # No time remaining
-                'duress_detected': False  # No duress detected
+                'frame': None,                      # No display frame available
+                'debug_frame': None,                # No debug frame available
+                'verification_result': 'PENDING',   # Default result
+                'exit_flag': False,                 # Continue processing
+                'challenge_text': None,             # No challenge text
+                'action_completed': False,          # Action not completed
+                'word_completed': False,            # Word not spoken
+                'time_remaining': 0,                # No time remaining
+                'duress_detected': False            # No duress detected
             }
         
         # Create copies of the frame for display and optional debug output
@@ -143,7 +106,7 @@ class LivenessDetector:
         # Detect face and ROI
         face_roi, face_rect = self.face_detector.detect_face(frame)
         
-        # Process face detection results
+        # Process face detection results and handle no face detected
         if face_roi is None:
             self.logger.debug("No face detected")  # Log no face found
             if debug_frame is not None:
@@ -168,11 +131,12 @@ class LivenessDetector:
                 landmarks = self.blink_detector.dlib_predictor(gray_roi, dlib_rect)  # Get facial landmarks
                 
                 # Extract eye landmark coordinates
-                left_eye = [(landmarks.part(i).x + x, landmarks.part(i).y + y) for i in range(36, 42)]
-                right_eye = [(landmarks.part(i).x + x, landmarks.part(i).y + y) for i in range(42, 48)]
+                left_eye = [(landmarks.part(i).x + x, landmarks.part(i).y + y) for i in range(36, 42)] # Left eye landmarks
+                right_eye = [(landmarks.part(i).x + x, landmarks.part(i).y + y) for i in range(42, 48)] # Right eye landmarks
                 
                 # Draw face bounding box with padding
-                padding = 20
+                padding = 20 # Padding for face bounding box
+
                 cv2.rectangle(debug_frame, 
                              (x - padding, y - padding), 
                              (x + w + padding, y + h + padding), 
@@ -180,7 +144,7 @@ class LivenessDetector:
                 
                 # Get current challenge details
                 challenge_text, action_completed, word_completed, _ = \
-                    self.challenge_manager.get_challenge_status(self.head_pose, self.blink_count, self.last_speech)
+                    self.challenge_manager.get_challenge_status(self.head_pose, self.blink_count, self.last_speech) # Get current challenge details
                 
                 # Extract action and word from challenge text
                 action_text = ""
@@ -217,20 +181,20 @@ class LivenessDetector:
                 cv2.polylines(debug_frame, [np.array(left_eye)], True, (0, 255, 0), 1)
                 cv2.polylines(debug_frame, [np.array(right_eye)], True, (0, 255, 0), 1)
                 
-                # Calculate Eye Aspect Ratio (EAR) for each eye
+                # Calculate Eye Aspect Ratio (EAR) for each eye (Formula: (Vertical distance between eye corners) / (Horizontal distance between eye corners))
                 left_ear = self.blink_detector.calculate_ear(np.array(left_eye) - np.array([x, y]))
                 right_ear = self.blink_detector.calculate_ear(np.array(right_eye) - np.array([x, y]))
                 
                 # Display EAR values near eyes
-                left_center = np.mean(np.array(left_eye), axis=0).astype(int)
-                right_center = np.mean(np.array(right_eye), axis=0).astype(int)
+                left_center = np.mean(np.array(left_eye), axis=0).astype(int) # Calculate the center of the left eye
+                right_center = np.mean(np.array(right_eye), axis=0).astype(int) # Calculate the center of the right eye
                 cv2.putText(debug_frame, f"L: {left_ear:.2f}", 
                             (left_center[0] - 20, left_center[1] - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1) # Display the EAR value for the left eye
                 cv2.putText(debug_frame, f"R: {right_ear:.2f}", 
                             (right_center[0] - 20, right_center[1] - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-                self.logger.debug(f"Debug frame generated: EAR L={left_ear:.2f}, R={right_ear:.2f}")  # Log EAR values
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1) # Display the EAR value for the right eye
+                self.logger.debug(f"Debug frame generated: EAR L={left_ear:.2f}, R={right_ear:.2f}")
         
         # Detect head pose and last spoken word
         self.head_pose = self.action_detector.detect_head_pose(frame, face_rect) or "center"  # Update head pose, fallback to "center"
@@ -238,23 +202,23 @@ class LivenessDetector:
         self.last_speech = self.speech_recognizer.get_last_speech()  # Update last speech
         self.logger.debug(f"Last speech: {self.last_speech}")  # Log last speech
         
-        # Check for duress keyword and set flag (actual handling moved to ChallengeManager)
+        # Check for duress keyword and set flag
         if self.last_speech.lower() == "verify":
             self.duress_detected = True
-            self.logger.info("Duress detected: 'verify' spoken")  # Log duress detection
+            self.logger.info("Duress detected: 'verify' spoken")
         
         # Update challenge manager with current detections
         self.challenge_manager.update(self.head_pose, self.blink_count, self.last_speech)
         
         # Get current challenge status with updated detection state
         challenge_text, action_completed, word_completed, verification_result = \
-            self.challenge_manager.get_challenge_status(self.head_pose, self.blink_count, self.last_speech)
-        time_left = self.challenge_manager.get_challenge_time_remaining()
+            self.challenge_manager.get_challenge_status(self.head_pose, self.blink_count, self.last_speech) # Get current challenge status
+        time_left = self.challenge_manager.get_challenge_time_remaining() # Get time remaining for current challenge
         self.logger.debug(f"Challenge status: text={challenge_text}, action={action_completed}, "
-                         f"word={word_completed}, result={verification_result}, time={time_left:.1f}s")  # Log status
+                         f"word={word_completed}, result={verification_result}, time={time_left:.1f}s")
         
-        final_result = 'PENDING'  # Default verification result
-        exit_flag = False  # Default flag to continue processing
+        final_result = 'PENDING'  # Default verification result (Pending means the verification is still ongoing)
+        exit_flag = False  # Default flag to continue processing (Used to determine if the verification is complete)
         
         # Process final verification outcome
         if verification_result in ["PASS", "FAIL"]:      
@@ -273,7 +237,7 @@ class LivenessDetector:
                 self.status = "VERIFICATION FAILED"
                 final_result = 'FAIL'
                 exit_flag = True
-            self.logger.debug(f"Verification result: {final_result}")  # Log result
+            self.logger.debug(f"Verification result: {final_result}")
         else:
             # Start a new challenge if none is active
             if not challenge_text:
@@ -283,50 +247,35 @@ class LivenessDetector:
                 time_left = self.challenge_manager.get_challenge_time_remaining()
                 self.logger.debug("Issued new challenge due to none active")  # Log new challenge
         
-        # Draw face info on both frames
-        # self.face_detector.draw_face_info(frame, face_rect, self.status, self.liveness_score)
-        '''
-        cv2.putText(frame, f"Speech: {self.last_speech}",
-                    (10, frame.shape[0] - 20),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)  # Display last speech
-        if self.config.SHOW_DEBUG_FRAME and debug_frame is not None:
-            self.face_detector.draw_face_info(debug_frame, face_rect, self.status, self.liveness_score)
-        '''
-        
+        # Draw face info on debug frame
         if debug_frame is not None:
             cv2.putText(debug_frame, f"Challenge: {challenge_text}", (10, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1) # Display the challenge text
             cv2.putText(debug_frame, f"Action completed: {action_completed}", (10, 60),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1) # Display if the action has been completed
             cv2.putText(debug_frame, f"Word completed: {word_completed}", (10, 90),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1) # Display if the word has been completed
             cv2.putText(debug_frame, f"Time left: {time_left:.1f}s", (10, 120),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1) # Display the time remaining
             cv2.putText(debug_frame, f"Head Pose: {self.head_pose if self.head_pose else 'None'}", (10, 150),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1) # Display the head pose
             cv2.putText(debug_frame, f"Speech: {self.last_speech}", (10, 180),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1) # Display the last spoken word
             cv2.putText(debug_frame, f"Blinks: {self.blink_count}", (10, 210),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        
-        # Update liveness score based on challenge completion
-        if action_completed and word_completed:
-            self.liveness_score = 1.0
-        else:
-            self.liveness_score = 0.0
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1) # Display the blink count
         
         self.logger.debug("Frame processing completed")  # Log completion
        
         # Return comprehensive result dictionary
         return {
-            'frame': frame,
-            'debug_frame': debug_frame,
-            'verification_result': final_result,
-            'exit_flag': exit_flag,
-            'challenge_text': challenge_text,
-            'action_completed': action_completed,
-            'word_completed': word_completed,
-            'blink_completed': self.blink_count >= 3,
-            'time_remaining': time_left,
-            'duress_detected': self.duress_detected
+            'frame': frame,                             # The original frame
+            'debug_frame': debug_frame,                 # The debug frame
+            'verification_result': final_result,        # The final verification result
+            'exit_flag': exit_flag,                     # Whether the verification is complete
+            'challenge_text': challenge_text,           # The current challenge text
+            'action_completed': action_completed,       # Whether the action has been completed
+            'word_completed': word_completed,           # Whether the word has been completed
+            'blink_completed': self.blink_count >= 3,   # Whether the blink count has been completed
+            'time_remaining': time_left,                # The time remaining for the current challenge
+            'duress_detected': self.duress_detected     # Whether duress has been detected
         }

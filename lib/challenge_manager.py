@@ -1,4 +1,5 @@
-"""Challenge management module for liveness verification."""
+# challenge_manager.py
+# Challenge management module for liveness verification
 
 import time
 import random
@@ -7,39 +8,37 @@ from typing import Optional, Tuple
 
 from lib.config import Config
 
+# Handles the lifecycle of challenges, including generation, verification, and tracking
 class ChallengeManager:
-    """Handles the lifecycle of challenges, including generation, verification, and tracking."""
 
+    # Initialise ChallengeManager
     def __init__(self, config: Config, speech_recognizer=None, blink_detector=None):
-        # Store config and input modules for interaction
-        self.config = config
-        self.speech_recognizer = speech_recognizer
-        self.blink_detector = blink_detector
+        self.config = config # Store config object
+        self.speech_recognizer = speech_recognizer # Store speech recognizer object
+        self.blink_detector = blink_detector # Store blink detector object
 
         # Set up logger
         self.logger = logging.getLogger(__name__)
 
         # Internal state tracking
-        self.current_challenge = None                      # The current active challenge (e.g. "turn left and say fish")
-        self.challenge_completed = False                   # True if current challenge has been passed
-        self.challenge_start_time = None                   # Timestamp when current challenge was issued
-        self.challenge_timeout = config.CHALLENGE_TIMEOUT  # Max time allowed for the challenge
-        self.available_actions = config.ACTIONS            # List of possible actions (head/blink)
-        self.available_keywords = list(config.SPEECH_KEYWORDS.keys())  # List of allowed speech keywords
-        self.verification_result = None                    # "PASS", "FAIL", or None
+        self.current_challenge = None # The current active challenge (e.g. "turn left and say fish")
+        self.challenge_completed = False # True if current challenge has been passed
+        self.challenge_start_time = None # Timestamp when current challenge was issued
+        self.challenge_timeout = config.CHALLENGE_TIMEOUT # Max time allowed for the challenge
+        self.available_actions = config.ACTIONS # List of possible actions (head/blink)
+        self.available_keywords = list(config.SPEECH_KEYWORDS.keys()) # List of allowed speech keywords
+        self.verification_result = None # "PASS", "FAIL", or None
 
         # Speech detection tracking
-        self.last_speech_time = None                       # When the last valid keyword was spoken
-        self.used_speech_time = None                       # Placeholder, not currently used
-        self.last_speech_word = None                       # What word was last spoken
+        self.last_speech_time = None # When the last valid keyword was spoken
+        self.used_speech_time = None # Placeholder, not currently used
+        self.last_speech_word = None # What word was last spoken
 
+    # Issue a new challenge
     def issue_new_challenge(self) -> str:
-        # Randomly choose a challenge (action + keyword)
-        action = random.choice(self.available_actions)
-
-        # Exclude special-case words like 'verify' and 'noise'
-        valid_keywords = [word for word in self.available_keywords if word != 'verify' and word != 'noise']
-        keyword = random.choice(valid_keywords)
+        action = random.choice(self.available_actions) # Randomly choose an action
+        valid_keywords = [word for word in self.available_keywords if word != 'verify' and word != 'noise'] # Exclude special-case words like 'verify' and 'noise'
+        keyword = random.choice(valid_keywords) # Randomly choose a keyword
 
         # Compose full challenge phrase
         self.current_challenge = f"{action} and say {keyword}"
@@ -55,8 +54,8 @@ class ChallengeManager:
         # Reset and configure speech recognizer with target keyword
         if self.speech_recognizer:
             self.speech_recognizer.reset()
-            word = self.current_challenge.lower().split("say ")[-1]
-            self.speech_recognizer.set_target_word(word)
+            word = self.current_challenge.lower().split("say ")[-1] # Extract target word from challenge
+            self.speech_recognizer.set_target_word(word) # Set target word for speech recognizer
 
         # Reset blink detector state if present
         if self.blink_detector:
@@ -66,8 +65,9 @@ class ChallengeManager:
         self.logger.info(f"New challenge issued: {self.current_challenge}")
         return self.current_challenge
 
+    # Verify the current challenge
     def verify_challenge(self, head_pose: str, blink_counter: int, last_speech: str) -> bool:
-        # Bail if no challenge is active
+        # Check if a challenge is active
         if self.current_challenge is None:
             return False
 
@@ -160,7 +160,7 @@ class ChallengeManager:
         elif self.last_speech_time:
             self.logger.debug(f"Speech too old: {current_time - self.last_speech_time:.2f}s")
 
-        # FINAL VERIFICATION CHECK
+        # Final verification check to see if the challenge is complete (action is happening and word is being spoken within time window)
         if action_is_happening and word_is_happening and blink_counter >= self.config.BLINK_COUNTER_THRESHOLD:
             self.challenge_completed = True
             self.verification_result = "PASS"
@@ -173,8 +173,8 @@ class ChallengeManager:
 
         return False
 
+    # Returns current challenge, whether action is happening, whether speech is valid, and result if any
     def get_challenge_status(self, head_pose: str, blink_counter: int, last_speech: str) -> Tuple[Optional[str], bool, bool, Optional[str]]:
-        # Returns current challenge, whether action is happening, whether speech is valid, and result if any
         if not self.current_challenge:
             return (None, False, False, self.verification_result)
 
@@ -187,32 +187,33 @@ class ChallengeManager:
             ("blink twice" in c and blink_counter >= self.config.BLINK_COUNTER_THRESHOLD)
         )
 
-        word = c.split("say ")[-1] if "say " in c else ""
+        word = c.split("say ")[-1] if "say " in c else "" # Extract target word from challenge
 
         # Check if word is still within valid speech window
-        word_in_time_window = False
+        word_in_time_window = False # Flag to indicate if the word is still within the valid speech window
         if self.last_speech_word == word and self.last_speech_time:
             time_diff = time.time() - self.last_speech_time
             word_in_time_window = time_diff <= self.config.ACTION_SPEECH_WINDOW
 
-        word_status = word_in_time_window
+        word_status = word_in_time_window # Set word status to whether it's within the valid speech window
 
         return (self.current_challenge, action, word_status, self.verification_result)
 
+    # Returns how many seconds are left before the current challenge times out
     def get_challenge_time_remaining(self) -> float:
-        # Returns how many seconds are left before the current challenge times out
         if self.current_challenge is None or self.challenge_start_time is None:
             return 0
         elapsed = time.time() - self.challenge_start_time
         return max(0, self.challenge_timeout - elapsed)
 
+    # Update the challenge manager with new head pose, blink counter, and last speech
     def update(self, head_pose: str, blink_counter: int, last_speech: str) -> None:
         # Trigger verification on each update loop/frame
         if self.current_challenge:
             self.verify_challenge(head_pose, blink_counter, last_speech)
 
+    # Fully reset challenge state
     def reset(self) -> None:
-        # Fully reset challenge state
         self.current_challenge = None
         self.challenge_completed = False
         self.challenge_start_time = None

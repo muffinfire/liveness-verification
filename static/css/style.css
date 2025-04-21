@@ -4,6 +4,7 @@
     padding: 0;
 }
 
+/* Body styles */
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     line-height: 1.6;
@@ -11,12 +12,14 @@ body {
     background-color: #121212;
 }
 
+/* Container styles */
 .container {
     max-width: 1200px;
     margin: 0 auto;
     padding: 20px;
 }
 
+/* Header styles */
 h1 {
     text-align: center;
     margin-bottom: 30px;
@@ -25,6 +28,7 @@ h1 {
     letter-spacing: 1px;
 }
 
+/* Subheader styles */
 h2 {
     color: #ffffff;
     font-weight: 400;
@@ -32,6 +36,7 @@ h2 {
     letter-spacing: 0.5px;
 }
 
+/* Subheader styles */
 h3 {
     color: #ffffff;
     font-weight: 400;
@@ -47,6 +52,7 @@ h3 {
     margin-bottom: 40px;
 }
 
+/* Landing page card styles */
 .card {
     background-color: #1e1e1e;
     padding: 30px;
@@ -58,21 +64,25 @@ h3 {
     transition: transform 0.3s, box-shadow 0.3s;
 }
 
+/* Hover effect for cards */
 .card:hover {
     transform: translateY(-5px);
     box-shadow: 0 15px 30px rgba(0, 0, 0, 0.4);
 }
 
+/* Card paragraph styles */
 .card p {
     color: #bbb;
     margin-bottom: 20px;
 }
 
+/* Input group styles */
 .input-group {
     display: flex;
     margin-top: 20px;
 }
 
+/* Input styles */
 input[type="text"] {
     flex: 1;
     padding: 12px 15px;
@@ -85,14 +95,17 @@ input[type="text"] {
     transition: border-color 0.3s;
 }
 
+/* Focus effect for input */
 input[type="text"]:focus {
     border-color: #3498db;
 }
 
+/* Button styles */
 .input-group .button {
     border-radius: 0 30px 30px 0;
 }
 
+/* Verification code styles */
 .verification-code {
     font-size: 36px;
     font-weight: bold;
@@ -105,6 +118,7 @@ input[type="text"]:focus {
     text-align: center;
 }
 
+/* QR code styles */
 #qr-display img {
     margin-top: 15px;
     max-width: 200px;
@@ -115,6 +129,7 @@ input[type="text"]:focus {
     margin: 0 auto;
 }
 
+/* Waiting status styles */
 .status-waiting {
     padding: 10px;
     color: #3498db;
@@ -129,6 +144,7 @@ input[type="text"]:focus {
     transition: all 0.3s ease;
 }
 
+/* Progress status styles */
 .status-progress {
     padding: 10px;
     color: #e0bd65;
@@ -143,6 +159,7 @@ input[type="text"]:focus {
     transition: all 0.3s ease;
 }
 
+/* Success status styles */
 .status-success {
     padding: 10px;
     color: #4cd137;
@@ -157,6 +174,7 @@ input[type="text"]:focus {
     transition: all 0.3s ease;
 }
 
+/* Failed status styles */
 .status-failed {
     padding: 10px;
     color: #e8603e;
@@ -171,6 +189,7 @@ input[type="text"]:focus {
     transition: all 0.3s ease;
 }
 
+/* Duress status styles */
 .status-duress {
     padding: 10px;
     color: #ff0000;
@@ -186,6 +205,7 @@ input[type="text"]:focus {
     transition: all 0.3s ease;
 }
 
+/* Session info styles for session code */
 .session-info {
     background-color: #1e1e1e;
     padding: 10px 20px;
@@ -196,6 +216,7 @@ input[type="text"]:focus {
     border: 1px solid #333;
 }
 
+/* Session info paragraph styles */
 .session-info p {
     margin: 0;
 }
@@ -206,6 +227,7 @@ input[type="text"]:focus {
     letter-spacing: 1px;
 }
 
+/* Footer styles of the landing page */
 .footer {
     text-align: center;
     margin-top: 40px;
@@ -221,10 +243,12 @@ input[type="text"]:focus {
     gap: 20px;
 }
 
+/* Single video container styles */
 .video-container.single-video {
     justify-content: center;
 }
 
+/* Video wrapper styles for */
 .video-wrapper {
     position: relative;
     width: 48%;
@@ -234,17 +258,20 @@ input[type="text"]:focus {
     box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
 }
 
+/* Single video wrapper styles */
 .single-video .video-wrapper {
     width: 100%;
     max-width: 640px;
 }
 
+/* Webcam styles for the video stream */
 #webcam, #overlay {
     width: 100%;
     height: auto;
     border-radius: 12px;
 }
 
+/* Overlay styles for the video stream */
 #overlay {
     position: absolute;
     top: 0;
@@ -263,6 +290,7 @@ input[type="text"]:focus {
     box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
 }
 
+/* Challenge container styles on the verification page*/
 .challenge-container {
     background-color: #1e1e1e;
     padding: 20px;
@@ -272,6 +300,7 @@ input[type="text"]:focus {
     border: 1px solid #333;
 }
 
+/* Challenge text styles on the verification page*/
 .challenge-text {
     font-size: 24px;
     font-weight: 500;
@@ -281,6 +310,7 @@ input[type="text"]:focus {
     letter-spacing: 0.5px;
 }
 
+/* Status container styles on the verification page*/
 .status-container {
     display: flex;
     justify-content: space-around;
@@ -289,6 +319,7 @@ input[type="text"]:focus {
     border-radius: 8px;
 }
 
+/* Status item styles on the verification page*/
 .status-item {
     display: flex;
     flex-direction: column;
@@ -296,6 +327,7 @@ input[type="text"]:focus {
     font-size: 18px;
 }
 
+/* Status item span styles on the verification page*/
 .status-item span:first-child {
     color: #999;
     margin-bottom: 5px;
@@ -304,6 +336,7 @@ input[type="text"]:focus {
     letter-spacing: 1px;
 }
 
+/* Result container styles on the verification page*/
 .result-container {
     background-color: #1e1e1e;
     padding: 25px;
@@ -314,6 +347,7 @@ input[type="text"]:focus {
     border: 1px solid #333;
 }
 
+/* Result text styles on the verification page*/
 .result-text {
     font-size: 1.5rem;
     font-weight: bold;
@@ -323,21 +357,25 @@ input[type="text"]:focus {
     margin-bottom: 1rem;
 }
 
+/* Result text success styles on the verification page*/
 .result-text.success {
     background-color: rgba(46, 204, 113, 0.3);
     color: #27ae60;
 }
 
+/* Result text failure styles on the verification page*/
 .result-text.failure {
     background-color: rgba(231, 76, 60, 0.3);
     color: #c0392b;
 }
 
+/* Result text duress styles on the verification page*/
 .result-text.duress {
     background-color: rgba(230, 126, 34, 0.3);
     color: #e67e22;
 }
 
+/* Button styles */
 .button {
     background-color: #2980b9;
     color: white;
@@ -353,16 +391,19 @@ input[type="text"]:focus {
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
+/* Button hover effect */
 .button:hover {
     background-color: #3498db;
     transform: translateY(-2px);
     box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
 }
 
+/* Button active effect */
 .button:active {
     transform: translateY(0);
 }
 
+/* Instructions styles */
 .instructions {
     background-color: #1e1e1e;
     padding: 20px;
@@ -371,6 +412,7 @@ input[type="text"]:focus {
     border: 1px solid #333;
 }
 
+/* Instructions h2 styles */
 .instructions h2 {
     margin-bottom: 15px;
     color: #ffffff;
@@ -378,6 +420,7 @@ input[type="text"]:focus {
     letter-spacing: 0.5px;
 }
 
+/* Instructions p styles */
 .instructions p {
     color: #bbb;
     margin-bottom: 10px;
@@ -385,6 +428,7 @@ input[type="text"]:focus {
     position: relative;
 }
 
+/* Instructions p before styles */
 .instructions p:before {
     content: "•";
     position: absolute;
@@ -392,36 +436,43 @@ input[type="text"]:focus {
     color: #3498db;
 }
 
+/* Hidden styles */
 .hidden {
     display: none;
 }
 
+/* Media query for mobile devices */
 @media (max-width: 768px) {
     .card-container {
         flex-direction: column;
         align-items: center;
     }
-    
+
+    /* Video container styles for mobile devices */
     .video-container {
         flex-direction: column;
     }
-    
+
+    /* Video wrapper styles for mobile devices */
     .video-wrapper, #processed-frame-container {
         width: 80%; /* Scaled down by 20% */
         margin: 0 auto; /* Center the video */
         max-height: 80vh; /* Limit height to 80% of viewport height */
     }
-    
+
+    /* Webcam and debug frame styles for mobile devices */
     #webcam, #debug-frame {
         width: 100%;
         height: auto;
         object-fit: contain;
     }
-    
+
+    /* Challenge text styles for mobile devices */
     .challenge-text {
         font-size: 20px;
     }
-    
+
+    /* Status item styles for mobile devices */
     .status-item {
         font-size: 16px;
     }
@@ -432,6 +483,7 @@ input[type="text"]:focus {
     }
 }
 
+/* Error container styles */
 .error-container {
     background-color: #1e1e1e;
     padding: 30px;
@@ -443,18 +495,21 @@ input[type="text"]:focus {
     max-width: 500px;
 }
 
+/* Error icon styles */
 .error-icon {
     font-size: 68px;
     color: #e74c3c;
     margin-bottom: 20px;
 }
 
+/* Error message styles */
 .error-message {
     font-size: 24px;
     color: #ffffff;
     margin-bottom: 30px;
 }
 
+/* Verify status styles */
 .verify-status {
     margin-top: 15px;
     padding: 10px;
@@ -468,18 +523,21 @@ input[type="text"]:focus {
     justify-content: center;
 }
 
+/* Verify status error styles */
 .verify-status.error {
     background-color: rgba(231, 76, 60, 0.2);
     color: #e74c3c;
     border: 1px solid rgba(231, 76, 60, 0.3);
 }
 
+/* Verify status success styles */
 .verify-status.success {
     background-color: rgba(46, 204, 113, 0.2);
     color: #2ecc71;
     border: 1px solid rgba(46, 204, 113, 0.3);
 }
 
+/* Verify status info styles */
 .verify-status.info {
     background-color: rgba(52, 152, 219, 0.2);
     color: #3498db;
@@ -494,6 +552,7 @@ input[type="text"]:focus {
     padding: 0;
 }
 
+/* Failure overlay styles */
 .failure-overlay .video-wrapper {
     box-shadow: 0 0 20px 10px rgba(231, 76, 60, 0.6);
     filter: sepia(0.3) saturate(1.5) brightness(0.9) hue-rotate(-20deg);
@@ -501,6 +560,7 @@ input[type="text"]:focus {
     padding: 0;
 }
 
+/* Duress overlay styles */
 .duress-overlay .video-wrapper {
     box-shadow: 0 0 20px 10px rgba(230, 126, 34, 0.6);
     filter: sepia(0.3) saturate(1.5) brightness(0.9) hue-rotate(10deg);
@@ -518,6 +578,7 @@ input[type="text"]:focus {
     object-fit: contain;
 }
 
+/* Processed frame container styles */
 #processed-frame-container, .video-wrapper {
     width: 48%;
     max-width: 640px;
@@ -535,12 +596,14 @@ input[type="text"]:focus {
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
 }
 
+/* QR video background styles */
 .qr-video-background {
     width: 100%;
     height: 100%;
     object-fit: cover;
 }
 
+/* QR overlay styles */
 .qr-overlay {
     position: absolute;
     top: 0;
@@ -555,6 +618,7 @@ input[type="text"]:focus {
     z-index: 2;
 }
 
+/* QR overlay img styles */
 .qr-overlay img {
     width: 80%;
     height: 80%;

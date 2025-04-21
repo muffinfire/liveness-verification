@@ -1,28 +1,28 @@
 // Wait for the HTML document to fully load before executing the script
 document.addEventListener('DOMContentLoaded', () => {
     // Get references to DOM elements used in the application
-    const generateCodeBtn = document.getElementById('generate-code-btn'); // Button to generate a verification code
-    const codeDisplay = document.getElementById('code-display'); // Container to show the generated code
-    const verificationCode = document.getElementById('verification-code'); // Element to display the code text
-    const verificationStatus = document.getElementById('verification-status'); // Displays verification status messages
-    const codeInput = document.getElementById('code-input'); // Input field for entering a code
-    const submitCodeBtn = document.getElementById('submit-code-btn'); // Button to submit the entered code
-    const verifyContainer = document.getElementById('verify-container'); // Container for verification status
-    const verifyStatus = document.createElement('div'); // Dynamic element for showing validation status
-    const qrDisplay = document.createElement('div'); // Dynamic element to display the QR code
+    const generateCodeBtn = document.getElementById('generate-code-btn');       // Button to generate a verification code
+    const codeDisplay = document.getElementById('code-display');                // Container to show the generated code
+    const verificationCode = document.getElementById('verification-code');      // Element to display the code text
+    const verificationStatus = document.getElementById('verification-status');  // Displays verification status messages
+    const codeInput = document.getElementById('code-input');                    // Input field for entering a code
+    const submitCodeBtn = document.getElementById('submit-code-btn');           // Button to submit the entered code
+    const verifyContainer = document.getElementById('verify-container');        // Container for verification status
+    const verifyStatus = document.createElement('div');                         // Dynamic element for showing validation status
+    const qrDisplay = document.createElement('div');                            // Dynamic element to display the QR code
     
     // Set up the verifyStatus element
-    verifyStatus.className = 'verify-status'; // Assign a class for styling
-    verifyContainer.appendChild(verifyStatus); // Add it to the verify container in the DOM
-    qrDisplay.id = 'qr-display'; // Set an ID for the QR code display element
-    codeDisplay.appendChild(qrDisplay); // Add QR display under the code display container
+    verifyStatus.className = 'verify-status';   // Assign a class for styling
+    verifyContainer.appendChild(verifyStatus);  // Add it to the verify container in the DOM
+    qrDisplay.id = 'qr-display';                // Set an ID for the QR code display element
+    codeDisplay.appendChild(qrDisplay);         // Add QR display under the code display container
     
     let socket; // Socket.IO connection to the server
     let currentCode = null; // Stores the currently generated verification code
     
-    // Initialize the Socket.IO connection and set up event listeners
+    // Initialise the Socket.IO connection and set up event listeners
     function initSocket() {
-        console.log('Initializing socket connection');
+        console.log('Initialising socket connection');
         socket = io(); // Create a new Socket.IO connection to the server
         
         // Handle successful connection to the server
@@ -75,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 qrDisplay.innerHTML = ''; // Clear existing content
                 qrDisplay.appendChild(videoQrContainer);
                 
-                // Initialize webcam for video background
+                // Initialise webcam for video background
                 initQrVideoBackground(videoBackground);
             } else {
                 // Standard QR code display without video background
@@ -195,8 +195,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    // Function to initialize QR code video background
-    // Note: We no longer initialize the user's webcam here
+    // Function to initialise QR code video background
     // The partner's video will be streamed from the verification page
     async function initQrVideoBackground(videoElement) {
         try {
@@ -209,9 +208,6 @@ document.addEventListener('DOMContentLoaded', () => {
             waitingText.textContent = 'Waiting for partner to connect...';
             videoElement.parentNode.appendChild(waitingText);
             
-            // We don't set videoElement.srcObject here anymore
-            // Instead, we'll receive the partner's video stream via WebRTC or server relay
-            
             // When video starts playing, fade in the QR code overlay
             videoElement.onloadedmetadata = () => {
                 videoElement.play().catch(err => console.error('Error playing video:', err));
@@ -222,9 +218,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (qrOverlay) {
                         qrOverlay.style.opacity = '0.8'; // Start with 80% opacity
                         
-                        // Gradually reduce opacity to 10-20%
+                        // Gradually reduce opacity to 0%
                         setTimeout(() => {
-                            qrOverlay.style.opacity = '0.2'; // Final 20% opacity
+                            qrOverlay.style.opacity = '0.0'; // Final 0% opacity
                         }, 2000); // After 2 seconds
                     }
                 }, 500);
@@ -241,7 +237,7 @@ document.addEventListener('DOMContentLoaded', () => {
             socket.emit('generate_code'); // Request a new code from the server
         } else {
             console.error('Socket not connected');
-            initSocket(); // Initialize socket if not connected
+            initSocket(); // Initialise socket if not connected
             setTimeout(() => { // Wait 1 second to ensure connection
                 if (socket && socket.connected) {
                     socket.emit('generate_code'); // Request a new code
@@ -327,6 +323,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
-    // Initialize the socket connection when the script runs
+    // Initialise the socket connection when the script runs
     initSocket();
 });
