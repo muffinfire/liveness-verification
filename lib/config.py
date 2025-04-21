@@ -44,7 +44,7 @@ class Config:
     MIN_BLINK_INTERVAL = 0.05  # Minimum time between blinks (seconds)
     
     # Challenge parameters
-    CHALLENGE_TIMEOUT = 60  # seconds
+    CHALLENGE_TIMEOUT = 15  # seconds
     ACTION_SPEECH_WINDOW = 3  # Time allowed between action and speech (seconds)
     SPEECH_DEBOUNCE_TIME = 0.1  # Ignore repeat detections of same word within this time
     BLINK_COUNTER_THRESHOLD = 2  # Minimum number of blinks to count as a challenge

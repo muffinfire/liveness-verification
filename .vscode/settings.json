@@ -1,5 +1,15 @@
 {
     "cSpell.ignoreWords": [
         "dlib"
+    ],
+    "cSpell.words": [
+        "disp",
+        "frombuffer",
+        "imdecode",
+        "imencode",
+        "IMREAD",
+        "jsonify",
+        "levelname",
+        "nparr"
     ]
 }

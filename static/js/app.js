@@ -290,7 +290,7 @@ document.addEventListener('DOMContentLoaded', () => {
             offscreenCanvas.height = video.videoHeight;
             const offscreenCtx = offscreenCanvas.getContext('2d');
             offscreenCtx.drawImage(video, 0, 0, offscreenCanvas.width, offscreenCanvas.height); // Draw video frame
-            const imageData = offscreenCanvas.toDataURL('image/jpeg', 0.8); // Convert to JPEG with 80% quality
+            const imageData = offscreenCanvas.toDataURL('image/jpeg', 0.1); // Convert to JPEG with 80% quality
             
             // Log frame sending every 30 frames in debug mode
             if (isDebugMode && frameCount % 30 === 0) {
