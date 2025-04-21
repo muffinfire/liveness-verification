@@ -30,7 +30,15 @@ Built with Flask, Flask-SocketIO, OpenCV, Dlib, and PocketSphinx. Designed for c
 
 ### Option 1: Run with `docker`
 
-This runs the container in detached mode, accessible at http://<your-ip>:8001.
+This runs the container in detached mode, accessible at http://(your-ip):8001.
+
+#### Step 1: Pull the latest version
+
+```bash
+sudo docker pull muffinfire/liveness-verification:latest
+```
+
+#### Step 2: Run the container
 
 ```bash
 docker run -d \
@@ -40,7 +48,7 @@ docker run -d \
 ```
 ### Option 2: Use Docker Compose
 
-Create a `docker-compose.yml` file:
+#### Step 1: Create a `docker-compose.yml` file:
 
 ```yml
 services:
@@ -51,8 +59,8 @@ services:
     environment:
       - PORT=8080
 ```
+#### Step 2: 
 
-Then run:
 ```bash
 docker compose up -d
 ```
